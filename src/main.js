@@ -8,6 +8,22 @@ import { buildTank, TANK } from './tank.js';
 const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 if (isMobile) document.body.classList.add('mobile'); // 供 CSS 判断（竖屏横屏提示等）
 
+// 移动端横屏处理：首次触摸尝试锁定横屏（Android 全屏可用，iOS 静默失败）；
+// 提供"竖屏继续"按钮，避免用户被提示遮罩卡住
+if (isMobile) {
+  const tryLockLandscape = () => {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => { });
+      }
+    } catch (e) { /* 不支持则忽略 */ }
+  };
+  window.addEventListener('pointerdown', tryLockLandscape, { once: true });
+  document.getElementById('continue-portrait')?.addEventListener('click', () => {
+    document.getElementById('rotate-hint').style.display = 'none';
+  });
+}
+
 const appEl = document.getElementById('app');
 const apiEl = document.getElementById('api');
 const fpsEl = document.getElementById('fps');

@@ -167,6 +167,16 @@
       font-size: 13px;
     }
 
+    #rotate-hint button {
+      margin-top: 8px;
+      padding: 8px 22px;
+      border-radius: 20px;
+      border: 1px solid rgba(159, 232, 255, 0.5);
+      color: #9fe8ff;
+      background: rgba(159, 232, 255, 0.08);
+      font: 14px "Microsoft YaHei", system-ui, sans-serif;
+    }
+
     @keyframes rotate-pulse {
 
       0%,
@@ -199,8 +209,9 @@
   <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图</div>
   <div id="rotate-hint">
     <div class="icon">↻</div>
-    <div>请将手机旋转至横屏</div>
-    <div class="sub">横屏可获得最佳观赏体验</div>
+    <div>建议横屏观看</div>
+    <div class="sub">旋转手机至横屏（提示自动消失），或点击下方继续竖屏浏览</div>
+    <button id="continue-portrait">竖屏继续</button>
   </div>
   <script type="module" src="/src/main.js"></script>
 </body>
