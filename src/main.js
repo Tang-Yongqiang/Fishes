@@ -1,8 +1,11 @@
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import modelUrl from '../models/XH378sJqtgOHKGAXMdeNF.stl?url';
+import { FEATURES, PARAMS, WORLD } from './config.js';
 import { createFish, loadFishModel, randomPoint, updateFish } from './fish.js';
 import { buildTank, TANK } from './tank.js';
-import { FEATURES, PARAMS, WORLD } from './config.js';
+
+// 移动端检测：手机/平板仅做展示（降低渲染压力、关闭依赖键盘/点击的交互）
+const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
 const appEl = document.getElementById('app');
 const apiEl = document.getElementById('api');
@@ -31,7 +34,7 @@ try {
   });
 }
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 appEl.appendChild(renderer.domElement);
@@ -83,12 +86,12 @@ const fishModel = await loadFishModel(modelUrl);
 // ---- 鱼群（体型统一，保留颜色与速度差异）----
 const fishes = [];
 const fishSpecs = [
-  { color: 0xff7043, speed: 2.9, count: 12 },
-  { color: 0x26c6da, speed: 3.4, count: 15 },
-  { color: 0xffca28, speed: 3.1, count: 12 },
-  { color: 0xec407a, speed: 3.1, count: 9 },
-  { color: 0x8e24aa, speed: 3.8, count: 9 },
-  { color: 0xff8a65, speed: 2.0, count: 3 },
+  { color: 0xff7043, speed: 2.9, count: isMobile ? 6 : 12 },
+  { color: 0x26c6da, speed: 3.4, count: isMobile ? 8 : 15 },
+  { color: 0xffca28, speed: 3.1, count: isMobile ? 6 : 12 },
+  { color: 0xec407a, speed: 3.1, count: isMobile ? 5 : 9 },
+  { color: 0x8e24aa, speed: 3.8, count: isMobile ? 5 : 9 },
+  { color: 0xff8a65, speed: 2.0, count: isMobile ? 2 : 3 },
 ];
 for (const spec of fishSpecs) {
   for (let i = 0; i < spec.count; i++) {
@@ -105,8 +108,8 @@ for (const spec of fishSpecs) {
   }
 }
 
-// 点击撒食（可选特性：点击水底撒食，鱼群游过去抢食）
-if (FEATURES.feeding) {
+// 点击撒食（可选特性：点击水底撒食，鱼群游过去抢食；移动端仅展示，关闭交互）
+if (FEATURES.feeding && !isMobile) {
   // 射线与缸体 AABB 求交（slab 法）：点击缸体任意可见位置都能定位到缸内
   const rayAABB2 = (origin, dir) => {
     let tMin = -Infinity, tMax = Infinity;
@@ -251,9 +254,9 @@ if (FEATURES.decor) {
   }
 }
 
-// ---- 水面光斑（可选特性：缸底动态光斑投影）----
+// ---- 水面光斑（可选特性：缸底动态光斑投影；移动端关闭以省性能）----
 let caustics = null;
-if (FEATURES.caustics) {
+if (FEATURES.caustics && !isMobile) {
   const cw = 256, ch = 256;
   const cCanvas = document.createElement('canvas');
   cCanvas.width = cw;
@@ -279,8 +282,8 @@ if (FEATURES.caustics) {
   caustics = { canvas: cCanvas, ctx: cctx, tex: cTex, w: cw, h: ch };
 }
 
-// ---- 实时参数面板（可选特性：拖动条实时调节）----
-if (FEATURES.panel) {
+// ---- 实时参数面板（可选特性：拖动条实时调节；移动端关闭避免遮挡）----
+if (FEATURES.panel && !isMobile) {
   const panel = document.createElement('div');
   panel.id = 'panel';
   const title = document.createElement('div');
@@ -323,8 +326,8 @@ if (FEATURES.panel) {
   document.body.appendChild(panel);
 }
 
-// ---- 截图导出（可选特性：按 P 保存当前画面为 PNG）----
-if (FEATURES.screenshot) {
+// ---- 截图导出（可选特性：按 P 保存当前画面为 PNG；移动端无键盘关闭）----
+if (FEATURES.screenshot && !isMobile) {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'p' || e.key === 'P') {
       const url = renderer.domElement.toDataURL('image/png');
