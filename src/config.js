@@ -15,6 +15,7 @@ export const FEATURES = {
   screenshot: true, // 截图导出：按 P 保存当前画面为 PNG
   clock: true,      // 数字时钟：鱼缸中央悬浮显示 HH:MM:SS
   clockFace: 'fixed', // 时钟朝向：'fixed' 固定方向（面向相机初始位置）| 'camera' 始终面对镜头
+  pwa: true,        // PWA：Service Worker 离线缓存 + manifest（添加到主屏幕离线运行）
 };
 
 export const PARAMS = {

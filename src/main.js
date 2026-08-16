@@ -412,6 +412,11 @@ if (FEATURES.clock) {
   drawClock(new Date());
 }
 
+// ---- PWA（可选特性）：注册 Service Worker，首次在线缓存资源，之后离线运行 ----
+if (FEATURES.pwa && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => { });
+}
+
 // ---- HUD ----
 apiEl.textContent = api;
 const updateRes = () => { resEl.textContent = `${window.innerWidth}×${window.innerHeight}`; };
