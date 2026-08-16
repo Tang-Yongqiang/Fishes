@@ -51,7 +51,7 @@ try {
   });
 }
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 appEl.appendChild(renderer.domElement);
@@ -103,12 +103,12 @@ const fishModel = await loadFishModel(modelUrl);
 // ---- 鱼群（体型统一，保留颜色与速度差异）----
 const fishes = [];
 const fishSpecs = [
-  { color: 0xff7043, speed: 2.9, count: isMobile ? 6 : 12 },
-  { color: 0x26c6da, speed: 3.4, count: isMobile ? 8 : 15 },
-  { color: 0xffca28, speed: 3.1, count: isMobile ? 6 : 12 },
-  { color: 0xec407a, speed: 3.1, count: isMobile ? 5 : 9 },
-  { color: 0x8e24aa, speed: 3.8, count: isMobile ? 5 : 9 },
-  { color: 0xff8a65, speed: 2.0, count: isMobile ? 2 : 3 },
+  { color: 0xff7043, speed: 2.9, count: 12 },
+  { color: 0x26c6da, speed: 3.4, count: 15 },
+  { color: 0xffca28, speed: 3.1, count: 12 },
+  { color: 0xec407a, speed: 3.1, count: 9 },
+  { color: 0x8e24aa, speed: 3.8, count: 9 },
+  { color: 0xff8a65, speed: 2.0, count: 3 },
 ];
 for (const spec of fishSpecs) {
   for (let i = 0; i < spec.count; i++) {
