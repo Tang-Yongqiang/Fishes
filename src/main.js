@@ -356,11 +356,12 @@ function drawClock(now) {
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
   c.fillStyle = '#9fe8ff';
-  c.font = '900 140px "Courier New", Consolas, monospace';
+  // 字号 100：8 个等宽字符（HH:MM:SS）≈ 480px < 512 画布宽，避免两端数字被裁掉
+  c.font = '900 100px "Courier New", Consolas, monospace';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.shadowColor = 'rgba(120, 225, 255, 0.6)';
-  c.shadowBlur = 24;
+  c.shadowBlur = 20;
   c.fillText(`${hh}:${mm}:${ss}`, 256, 90);
   c.shadowBlur = 0;
   clockTex.needsUpdate = true;
@@ -371,16 +372,23 @@ if (FEATURES.clock) {
   clockCanvas.height = 180;
   clockCtx = clockCanvas.getContext('2d');
   clockTex = new THREE.CanvasTexture(clockCanvas);
-  const clockMat = new THREE.SpriteMaterial({
-    map: clockTex,
-    transparent: true,
-    depthWrite: false, // 不写深度，避免透明时钟排序异常；depthTest 保持开启（景深）
-  });
-  const clockSprite = new THREE.Sprite(clockMat);
-  // 宽 56：鱼缸宽 72，时钟两侧各留 ~8 边距（默认相机下屏幕左右也留白）
-  clockSprite.scale.set(56, 19.7, 1);
-  clockSprite.position.set(0, 13, 0); // 鱼缸中心（缸 y∈[-3,29]）
-  scene.add(clockSprite);
+  const cTex = clockTex;
+  const depthMat = { transparent: true, depthWrite: false }; // depthTest 默认开（景深）
+  if (FEATURES.clockFace === 'camera') {
+    // 始终面对镜头（billboard）
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: cTex, ...depthMat }));
+    sprite.scale.set(56, 19.7, 1);
+    sprite.position.set(0, 13, 0);
+    scene.add(sprite);
+  } else {
+    // 固定朝向：PlaneGeometry 法线默认 +Z，面向相机初始位置（相机在 +Z 方向）
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(56, 19.7),
+      new THREE.MeshBasicMaterial({ map: cTex, ...depthMat, side: THREE.DoubleSide })
+    );
+    mesh.position.set(0, 13, 0);
+    scene.add(mesh);
+  }
   drawClock(new Date());
 }
 
