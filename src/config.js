@@ -13,6 +13,7 @@ export const FEATURES = {
   predator: false,   // 掠食者：一条大鱼追逐鱼群，鱼群四散逃避（暂关闭）
   panel: true,      // 实时参数面板：拖动条调节各项参数
   screenshot: true, // 截图导出：按 P 保存当前画面为 PNG
+  clock: true,      // 数字时钟：鱼缸中央悬浮显示 HH:MM:SS
 };
 
 export const PARAMS = {
