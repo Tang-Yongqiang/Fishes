@@ -1,8 +1,8 @@
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import modelUrl from '../models/XH378sJqtgOHKGAXMdeNF.stl?url';
+import { FEATURES, PARAMS, WORLD } from './config.js';
 import { createFish, loadFishModel, randomPoint, updateFish } from './fish.js';
 import { buildTank, TANK } from './tank.js';
-import { FEATURES, PARAMS, WORLD } from './config.js';
 
 const appEl = document.getElementById('app');
 const apiEl = document.getElementById('api');
@@ -336,6 +336,53 @@ if (FEATURES.screenshot) {
   });
 }
 
+// ---- 数字时钟（可选特性：鱼缸中央悬浮显示 HH:MM:SS，Sprite 始终面向相机）----
+let clockCtx = null, clockTex = null, lastClockSec = -1;
+function drawClock(now) {
+  if (!clockCtx) return;
+  const c = clockCtx;
+  c.clearRect(0, 0, 512, 160);
+  // 半透明圆角底板
+  c.fillStyle = 'rgba(4, 14, 24, 0.55)';
+  c.beginPath();
+  c.roundRect(8, 8, 496, 144, 20);
+  c.fill();
+  c.strokeStyle = 'rgba(127, 232, 255, 0.35)';
+  c.lineWidth = 3;
+  c.stroke();
+  // 时间文本
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  c.fillStyle = '#7fe8ff';
+  c.font = 'bold 88px "Courier New", Consolas, monospace';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.shadowColor = 'rgba(80, 220, 255, 0.55)';
+  c.shadowBlur = 18;
+  c.fillText(`${hh}:${mm}:${ss}`, 256, 80);
+  c.shadowBlur = 0;
+  clockTex.needsUpdate = true;
+}
+if (FEATURES.clock) {
+  const clockCanvas = document.createElement('canvas');
+  clockCanvas.width = 512;
+  clockCanvas.height = 160;
+  clockCtx = clockCanvas.getContext('2d');
+  clockTex = new THREE.CanvasTexture(clockCanvas);
+  const clockMat = new THREE.SpriteMaterial({
+    map: clockTex,
+    transparent: true,
+    depthWrite: false,
+  });
+  const clockSprite = new THREE.Sprite(clockMat);
+  clockSprite.scale.set(9, 2.8, 1);
+  // 鱼缸中央偏上（缸 y∈[-3,29]，中央 ≈13）
+  clockSprite.position.set(0, 13, 0);
+  scene.add(clockSprite);
+  drawClock(new Date());
+}
+
 // ---- HUD ----
 apiEl.textContent = api;
 const updateRes = () => { resEl.textContent = `${window.innerWidth}×${window.innerHeight}`; };
@@ -410,6 +457,15 @@ renderer.setAnimationLoop(() => {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.05);
   const t = timer.getElapsed();
+
+  // ---- 数字时钟（可选特性）：秒数变化时重绘 ----
+  if (FEATURES.clock) {
+    const now = new Date();
+    if (now.getSeconds() !== lastClockSec) {
+      lastClockSec = now.getSeconds();
+      drawClock(now);
+    }
+  }
 
   if (!paused) {
     for (const f of fishes) updateFish(f, t, dt, fishes);
