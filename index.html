@@ -1,46 +1,152 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D 鱼缸</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #081018; }
-    #app { position: fixed; inset: 0; }
-    #app canvas { display: block; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #081018;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    #app canvas {
+      display: block;
+    }
+
     #hud {
-      position: fixed; top: 14px; left: 16px; z-index: 10;
-      color: #cfe6f2; font: 12px/1.8 "Microsoft YaHei", system-ui, sans-serif;
-      background: rgba(6, 16, 26, 0.55); backdrop-filter: blur(6px);
-      padding: 10px 14px; border-radius: 10px;
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      z-index: 10;
+      color: #cfe6f2;
+      font: 12px/1.8 "Microsoft YaHei", system-ui, sans-serif;
+      background: rgba(6, 16, 26, 0.55);
+      backdrop-filter: blur(6px);
+      padding: 10px 14px;
+      border-radius: 10px;
       border: 1px solid rgba(120, 190, 230, 0.25);
-      user-select: none; min-width: 176px;
+      user-select: none;
+      min-width: 176px;
     }
-    #hud .row { display: flex; justify-content: space-between; gap: 18px; }
-    #hud .label { color: #7fa8c0; }
-    #hud .val { font-weight: 600; color: #9fe8ff; }
+
+    #hud .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    #hud .label {
+      color: #7fa8c0;
+    }
+
+    #hud .val {
+      font-weight: 600;
+      color: #9fe8ff;
+    }
+
     #hint {
-      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
-      color: rgba(200, 225, 240, 0.55); font: 12px/1.6 "Microsoft YaHei", system-ui, sans-serif;
-      text-align: center; pointer-events: none;
-      background: rgba(6, 16, 26, 0.35); padding: 6px 14px; border-radius: 20px;
+      position: fixed;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      color: rgba(200, 225, 240, 0.55);
+      font: 12px/1.6 "Microsoft YaHei", system-ui, sans-serif;
+      text-align: center;
+      pointer-events: none;
+      background: rgba(6, 16, 26, 0.35);
+      padding: 6px 14px;
+      border-radius: 20px;
     }
+
     #panel {
-      position: fixed; top: 14px; right: 16px; z-index: 10;
-      color: #cfe6f2; font: 12px/1.8 "Microsoft YaHei", system-ui, sans-serif;
-      background: rgba(6, 16, 26, 0.55); backdrop-filter: blur(6px);
-      padding: 10px 14px; border-radius: 10px;
+      position: fixed;
+      top: 14px;
+      right: 16px;
+      z-index: 10;
+      color: #cfe6f2;
+      font: 12px/1.8 "Microsoft YaHei", system-ui, sans-serif;
+      background: rgba(6, 16, 26, 0.55);
+      backdrop-filter: blur(6px);
+      padding: 10px 14px;
+      border-radius: 10px;
       border: 1px solid rgba(120, 190, 230, 0.25);
-      user-select: none; width: 230px; max-height: calc(100vh - 40px); overflow: auto;
+      user-select: none;
+      width: 230px;
+      max-height: calc(100vh - 40px);
+      overflow: auto;
     }
-    #panel .ptitle { font-weight: 600; color: #9fe8ff; margin-bottom: 4px; }
-    #panel .prow { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
-    #panel .prow span:first-child { width: 74px; color: #7fa8c0; flex-shrink: 0; }
-    #panel .prow input { flex: 1; min-width: 0; accent-color: #4fc3f7; }
-    #panel .pval { width: 42px; text-align: right; color: #9fe8ff; font-weight: 600; }
+
+    #panel .ptitle {
+      font-weight: 600;
+      color: #9fe8ff;
+      margin-bottom: 4px;
+    }
+
+    #panel .prow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 2px 0;
+    }
+
+    #panel .prow span:first-child {
+      width: 74px;
+      color: #7fa8c0;
+      flex-shrink: 0;
+    }
+
+    #panel .prow input {
+      flex: 1;
+      min-width: 0;
+      accent-color: #4fc3f7;
+    }
+
+    #panel .pval {
+      width: 42px;
+      text-align: right;
+      color: #9fe8ff;
+      font-weight: 600;
+    }
+
+    /* 全屏大时钟：占满整个屏幕（鱼缸在其后隐约可见），不拦截交互 */
+    #fullclock {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(4, 14, 24, 0.25) 0%, rgba(4, 14, 24, 0.55) 100%);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #fullclock-time {
+      font: 900 20vw/1 "Courier New", Consolas, monospace;
+      color: #9fe8ff;
+      letter-spacing: 0.06em;
+      text-shadow: 0 0 24px rgba(120, 225, 255, 0.55), 0 0 70px rgba(80, 200, 255, 0.3);
+    }
   </style>
 </head>
+
 <body>
   <div id="app"></div>
   <div id="hud">
@@ -51,6 +157,8 @@
     <div class="row"><span class="label">状态</span><span class="val" id="state">运行</span></div>
   </div>
   <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图</div>
+  <div id="fullclock"><span id="fullclock-time">--:--:--</span></div>
   <script type="module" src="/src/main.js"></script>
 </body>
+
 </html>
