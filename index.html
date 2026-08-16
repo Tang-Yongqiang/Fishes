@@ -177,26 +177,6 @@
       font: 14px "Microsoft YaHei", system-ui, sans-serif;
     }
 
-    /* 全屏大时钟：占满整个屏幕（鱼缸在其后隐约可见），不拦截交互 */
-    #fullclock {
-      position: fixed;
-      inset: 0;
-      z-index: 5;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: radial-gradient(ellipse at center, rgba(4, 14, 24, 0.25) 0%, rgba(4, 14, 24, 0.55) 100%);
-      pointer-events: none;
-      user-select: none;
-    }
-
-    #fullclock-time {
-      font: 900 20vw/1 "Courier New", Consolas, monospace;
-      color: #9fe8ff;
-      letter-spacing: 0.06em;
-      text-shadow: 0 0 24px rgba(120, 225, 255, 0.55), 0 0 70px rgba(80, 200, 255, 0.3);
-    }
-
     @keyframes rotate-pulse {
 
       0%,
@@ -227,7 +207,6 @@
     <div class="row"><span class="label">状态</span><span class="val" id="state">运行</span></div>
   </div>
   <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图</div>
-  <div id="fullclock"><span id="fullclock-time">--:--:--</span></div>
   <div id="rotate-hint">
     <div class="icon">↻</div>
     <div>建议横屏观看</div>

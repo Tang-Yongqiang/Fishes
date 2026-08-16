@@ -356,16 +356,53 @@ if (FEATURES.screenshot && !isMobile) {
   });
 }
 
-// ---- 数字时钟（可选特性：全屏大时钟，占满整个屏幕，鱼缸在其后隐约可见）----
-const fullclockEl = document.getElementById('fullclock-time');
-let lastClockSec = -1;
+// ---- 数字时钟（可选特性）：鱼缸中心悬浮大时钟，Sprite 始终面向相机。
+// 中心与鱼缸中心对齐：相机拉近时时钟视觉变大（缸内特写），拉远时相对缸变小；
+// depthTest 默认开启 → 鱼游到时钟前方/后方有正确遮挡（景深）。
+let clockCtx = null, clockTex = null, lastClockSec = -1;
 function drawClock(now) {
+  if (!clockCtx) return;
+  const c = clockCtx;
+  c.clearRect(0, 0, 512, 180);
+  // 半透明圆角底板
+  c.fillStyle = 'rgba(4, 14, 24, 0.5)';
+  c.beginPath();
+  c.roundRect(8, 8, 496, 164, 22);
+  c.fill();
+  c.strokeStyle = 'rgba(127, 232, 255, 0.35)';
+  c.lineWidth = 4;
+  c.stroke();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  fullclockEl.textContent = `${hh}:${mm}:${ss}`;
+  c.fillStyle = '#9fe8ff';
+  c.font = '900 140px "Courier New", Consolas, monospace';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.shadowColor = 'rgba(120, 225, 255, 0.6)';
+  c.shadowBlur = 24;
+  c.fillText(`${hh}:${mm}:${ss}`, 256, 90);
+  c.shadowBlur = 0;
+  clockTex.needsUpdate = true;
 }
-if (FEATURES.clock) drawClock(new Date());
+if (FEATURES.clock) {
+  const clockCanvas = document.createElement('canvas');
+  clockCanvas.width = 512;
+  clockCanvas.height = 180;
+  clockCtx = clockCanvas.getContext('2d');
+  clockTex = new THREE.CanvasTexture(clockCanvas);
+  const clockMat = new THREE.SpriteMaterial({
+    map: clockTex,
+    transparent: true,
+    depthWrite: false, // 不写深度，避免透明时钟排序异常；depthTest 保持开启（景深）
+  });
+  const clockSprite = new THREE.Sprite(clockMat);
+  // 宽 56：鱼缸宽 72，时钟两侧各留 ~8 边距（默认相机下屏幕左右也留白）
+  clockSprite.scale.set(56, 19.7, 1);
+  clockSprite.position.set(0, 13, 0); // 鱼缸中心（缸 y∈[-3,29]）
+  scene.add(clockSprite);
+  drawClock(new Date());
+}
 
 // ---- HUD ----
 apiEl.textContent = api;
