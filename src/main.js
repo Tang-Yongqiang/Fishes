@@ -6,6 +6,7 @@ import { buildTank, TANK } from './tank.js';
 
 // 移动端检测：手机/平板仅做展示（降低渲染压力、关闭依赖键盘/点击的交互）
 const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+if (isMobile) document.body.classList.add('mobile'); // 供 CSS 判断（竖屏横屏提示等）
 
 const appEl = document.getElementById('app');
 const apiEl = document.getElementById('api');

@@ -139,6 +139,51 @@
         min-width: 128px;
       }
     }
+
+    /* 竖屏提示：引导旋转至横屏（横屏自动消失） */
+    #rotate-hint {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(5, 12, 20, 0.85);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: #9fe8ff;
+      font: 16px/1.6 "Microsoft YaHei", system-ui, sans-serif;
+      text-align: center;
+      user-select: none;
+    }
+
+    #rotate-hint .icon {
+      font-size: 46px;
+      animation: rotate-pulse 1.6s ease-in-out infinite;
+    }
+
+    #rotate-hint .sub {
+      color: rgba(159, 232, 255, 0.6);
+      font-size: 13px;
+    }
+
+    @keyframes rotate-pulse {
+
+      0%,
+      100% {
+        transform: rotate(0deg);
+      }
+
+      50% {
+        transform: rotate(90deg);
+      }
+    }
+
+    @media (orientation: portrait) {
+      body.mobile #rotate-hint {
+        display: flex;
+      }
+    }
   </style>
 </head>
 
@@ -152,6 +197,11 @@
     <div class="row"><span class="label">状态</span><span class="val" id="state">运行</span></div>
   </div>
   <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图</div>
+  <div id="rotate-hint">
+    <div class="icon">↻</div>
+    <div>请将手机旋转至横屏</div>
+    <div class="sub">横屏可获得最佳观赏体验</div>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 
