@@ -380,15 +380,25 @@ function drawClock(now) {
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  // 字号 200：数字总宽约 870px，居中后两侧留 ~76px，含发光也不超出底板
+  // 固定每字符位置布局（d0 d1 : d2 d3 : d4 d5），数字等宽(tabular-nums)：
+  // 不同数字组合总宽恒定，时钟整体永不偏移
+  const chars = [hh[0], hh[1], ':', mm[0], mm[1], ':', ss[0], ss[1]];
+  const cellW = [130, 130, 40, 130, 130, 40, 130, 130]; // 数字格 130、冒号格 40
+  const totalW = cellW.reduce((a, b) => a + b, 0);       // 860
   c.fillStyle = '#9fe8ff';
   c.font = '900 200px "Roboto", "Droid Sans", "Noto Sans", "Segoe UI", "Arial", sans-serif';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
+  c.fontVariantNumeric = 'tabular-nums'; // 数字等宽：窄数字(1)不压缩格宽
   c.shadowColor = 'rgba(120, 225, 255, 0.55)';
   c.shadowBlur = 28;
-  c.fillText(`${hh}:${mm}:${ss}`, 512, 180);
+  let cx = (1024 - totalW) / 2;
+  for (let i = 0; i < 8; i++) {
+    c.fillText(chars[i], cx + cellW[i] / 2, 180);
+    cx += cellW[i];
+  }
   c.shadowBlur = 0;
+  c.shadowColor = 'transparent';
   clockTex.needsUpdate = true;
 }
 if (FEATURES.clock) {
