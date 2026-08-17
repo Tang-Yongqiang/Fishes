@@ -362,78 +362,42 @@ if (FEATURES.screenshot && !isMobile) {
 // ---- 数字时钟（可选特性）：鱼缸中心悬浮大时钟，Sprite 始终面向相机。
 // 中心与鱼缸中心对齐：相机拉近时时钟视觉变大（缸内特写），拉远时相对缸变小；
 // depthTest 默认开启 → 鱼游到时钟前方/后方有正确遮挡（景深）。
+// 纹理用 1024 宽高清渲染（512 放大到屏幕会模糊），字体选粗黑体（Roboto/无衬线）。
 let clockCtx = null, clockTex = null, lastClockSec = -1;
-
-// 七段数码管数字映射（晶体管/LED 样式）
-const SEG7 = {
-  '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc',
-  '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg',
-};
-
-function drawSegment(c, x1, y1, x2, y2, on) {
-  c.fillStyle = on ? '#7fe8ff' : 'rgba(127, 232, 255, 0.13)';
-  c.shadowColor = on ? 'rgba(120, 225, 255, 0.6)' : 'transparent';
-  c.fillRect(x1, y1, x2 - x1, y2 - y1);
-}
-
-function drawDigit(c, x, y, onStr) {
-  // 每个数字单元：宽 46、高 100，段厚 8~10
-  const SEG_RECT = {
-    a: [x + 6, y, x + 34, y + 8],    // 顶横
-    f: [x, y + 12, x + 8, y + 52],   // 左上竖
-    b: [x + 38, y + 12, x + 46, y + 52], // 右上竖
-    g: [x + 6, y + 46, x + 34, y + 54],  // 中横
-    e: [x, y + 60, x + 8, y + 100],      // 左下竖
-    c: [x + 38, y + 60, x + 46, y + 100], // 右下竖
-    d: [x + 6, y + 92, x + 34, y + 100],  // 底横
-  };
-  c.shadowBlur = 10;
-  for (const k of 'abcdefg') {
-    const [x1, y1, x2, y2] = SEG_RECT[k];
-    drawSegment(c, x1, y1, x2, y2, onStr.includes(k));
-  }
-  c.shadowBlur = 0;
-  c.shadowColor = 'transparent';
-}
 
 function drawClock(now) {
   if (!clockCtx) return;
   const c = clockCtx;
-  c.clearRect(0, 0, 512, 180);
+  c.clearRect(0, 0, 1024, 360);
   // 半透明圆角底板
   c.fillStyle = 'rgba(4, 14, 24, 0.5)';
   c.beginPath();
-  c.roundRect(8, 8, 496, 164, 22);
+  c.roundRect(16, 16, 992, 328, 44);
   c.fill();
   c.strokeStyle = 'rgba(127, 232, 255, 0.3)';
-  c.lineWidth = 3;
+  c.lineWidth = 6;
   c.stroke();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  const digits = (hh + mm + ss).split('');
-  // 布局：6 个数字单元 + 2 个冒号（冒号每秒闪烁）
-  const ox = 66, oy = 30, dx = 60;
-  for (let i = 0; i < 6; i++) {
-    drawDigit(c, ox + i * dx, oy, SEG7[digits[i]] || '');
-  }
-  const blink = now.getSeconds() % 2 === 0;
-  const colonColor = blink ? '#7fe8ff' : 'rgba(127, 232, 255, 0.15)';
-  for (const cx of [ox + 2 * dx - 24, ox + 4 * dx - 24]) {
-    c.fillStyle = colonColor;
-    c.beginPath();
-    c.arc(cx, oy + 30, 7, 0, Math.PI * 2);
-    c.arc(cx, oy + 68, 7, 0, Math.PI * 2);
-    c.fill();
-  }
+  // 粗黑体数字：8 个字符（HH:MM:SS）实际用 6 数字 + 2 冒号，240px 下约 <1000px 不裁切
+  c.fillStyle = '#9fe8ff';
+  c.font = '900 240px "Roboto", "Droid Sans", "Noto Sans", "Segoe UI", "Arial", sans-serif';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.shadowColor = 'rgba(120, 225, 255, 0.55)';
+  c.shadowBlur = 34;
+  c.fillText(`${hh}:${mm}:${ss}`, 512, 180);
+  c.shadowBlur = 0;
   clockTex.needsUpdate = true;
 }
 if (FEATURES.clock) {
   const clockCanvas = document.createElement('canvas');
-  clockCanvas.width = 512;
-  clockCanvas.height = 180;
+  clockCanvas.width = 1024; // 高清纹理：放大到屏幕仍锐利
+  clockCanvas.height = 360;
   clockCtx = clockCanvas.getContext('2d');
   clockTex = new THREE.CanvasTexture(clockCanvas);
+  clockTex.anisotropy = 8; // 各向异性过滤：任何视角下都保持锐利
   const cTex = clockTex;
   const depthMat = { transparent: true, depthWrite: false }; // depthTest 默认开（景深）
   if (FEATURES.clockFace === 'camera') {
