@@ -492,14 +492,16 @@ const mvFwd = new THREE.Vector3();  // WASD：相机水平前方向
 const mvRight = new THREE.Vector3(); // WASD：相机水平右方向
 const mvDelta = new THREE.Vector3(); // WASD：移动增量
 renderer.setAnimationLoop(() => {
-  timer.update();
-  // 移动端帧率上限（省电）：限制渲染频率，避免 GPU 满载持续耗电；桌面不限
+  // 移动端帧率上限（省电）：限制渲染频率。
+  // 跳过帧时不调用 timer.update()，保证渲染帧的 dt 反映真实渲染间隔，
+  // 鱼的移动速度与帧率无关（不会因限帧而变慢）。
   const FPS_CAP = isMobile ? 33.3 : 0; // ms/帧（≈30fps）
   if (FPS_CAP > 0) {
     const nowMs = performance.now();
     if (nowMs - lastFrameMs < FPS_CAP) return;
     lastFrameMs = nowMs;
   }
+  timer.update();
   const dt = Math.min(timer.getDelta(), 0.05);
   const t = timer.getElapsed();
 
