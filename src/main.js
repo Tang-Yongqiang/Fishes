@@ -4,8 +4,11 @@ import { FEATURES, PARAMS, WORLD } from './config.js';
 import { createFish, loadFishModel, randomPoint, updateFish } from './fish.js';
 import { buildTank, TANK } from './tank.js';
 
-// 移动端检测：手机/平板仅做展示（降低渲染压力、关闭依赖键盘/点击的交互）
-const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+// 移动端检测：手机/平板仅做展示。
+// 1) Capacitor 打包的 APK 内 window.Capacitor 必然存在 → 强制移动端（避免 WebView UA 差异）；
+// 2) UA 匹配兜底。不用触摸点/宽度启发式（避免触摸屏笔记本+窄窗口误判）。
+const isMobile = !!window.Capacitor
+  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 if (isMobile) document.body.classList.add('mobile'); // 供 CSS 判断（竖屏横屏提示等）
 
 // 移动端横屏处理：首次触摸尝试锁定横屏（Android 全屏可用，iOS 静默失败）；
@@ -51,7 +54,7 @@ try {
   });
 }
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 appEl.appendChild(renderer.domElement);
@@ -484,11 +487,19 @@ window.addEventListener('keyup', (e) => {
 
 // ---- 主循环 ----
 const timer = new THREE.Timer();
+let lastFrameMs = 0; // 移动端帧率上限（省电）的上次渲染时间戳
 const mvFwd = new THREE.Vector3();  // WASD：相机水平前方向
 const mvRight = new THREE.Vector3(); // WASD：相机水平右方向
 const mvDelta = new THREE.Vector3(); // WASD：移动增量
 renderer.setAnimationLoop(() => {
   timer.update();
+  // 移动端帧率上限（省电）：限制渲染频率，避免 GPU 满载持续耗电；桌面不限
+  const FPS_CAP = isMobile ? 33.3 : 0; // ms/帧（≈30fps）
+  if (FPS_CAP > 0) {
+    const nowMs = performance.now();
+    if (nowMs - lastFrameMs < FPS_CAP) return;
+    lastFrameMs = nowMs;
+  }
   const dt = Math.min(timer.getDelta(), 0.05);
   const t = timer.getElapsed();
 
