@@ -369,10 +369,10 @@ function drawClock(now) {
   if (!clockCtx) return;
   const c = clockCtx;
   c.clearRect(0, 0, 1024, 360);
-  // 半透明圆角底板
+  // 半透明圆角底板（留足内边距，确保数字+发光完全在框内）
   c.fillStyle = 'rgba(4, 14, 24, 0.5)';
   c.beginPath();
-  c.roundRect(16, 16, 992, 328, 44);
+  c.roundRect(24, 24, 976, 312, 48);
   c.fill();
   c.strokeStyle = 'rgba(127, 232, 255, 0.3)';
   c.lineWidth = 6;
@@ -380,13 +380,13 @@ function drawClock(now) {
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  // 粗黑体数字：8 个字符（HH:MM:SS）实际用 6 数字 + 2 冒号，240px 下约 <1000px 不裁切
+  // 字号 200：数字总宽约 870px，居中后两侧留 ~76px，含发光也不超出底板
   c.fillStyle = '#9fe8ff';
-  c.font = '900 240px "Roboto", "Droid Sans", "Noto Sans", "Segoe UI", "Arial", sans-serif';
+  c.font = '900 200px "Roboto", "Droid Sans", "Noto Sans", "Segoe UI", "Arial", sans-serif';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.shadowColor = 'rgba(120, 225, 255, 0.55)';
-  c.shadowBlur = 34;
+  c.shadowBlur = 28;
   c.fillText(`${hh}:${mm}:${ss}`, 512, 180);
   c.shadowBlur = 0;
   clockTex.needsUpdate = true;
