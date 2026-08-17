@@ -18,6 +18,7 @@ export const FEATURES = {
   pwa: true,        // PWA：Service Worker 离线缓存 + manifest（添加到主屏幕离线运行）
   fishPlay: true,   // 鱼群行为升级：追逐嬉戏 / 惊散反应 / 队形变换
   creatures: true,  // 微小生物：缸底小虾爬动 + 扬沙颗粒
+  uiToggle: true,   // UI 一键隐藏：电脑按 H，手机端虚拟按钮（沉浸式全屏鱼缸）
 };
 
 export const PARAMS = {
