@@ -174,14 +174,24 @@
     }
 
     #rotate-hint button {
-      margin-top: 8px;
-      padding: 8px 22px;
-      border-radius: 20px;
-      border: 1px solid rgba(159, 232, 255, 0.5);
-      color: #9fe8ff;
-      background: rgba(159, 232, 255, 0.08);
-      font: 14px "Microsoft YaHei", system-ui, sans-serif;
+      margin-top: 8px; padding: 8px 22px; border-radius: 20px;
+      border: 1px solid rgba(159, 232, 255, 0.5); color: #9fe8ff;
+      background: rgba(159, 232, 255, 0.08); font: 14px "Microsoft YaHei", system-ui, sans-serif;
     }
+    /* UI 一键隐藏（可选特性）：body.ui-hidden 时隐藏全部界面层，只留鱼缸 */
+    body.ui-hidden #hud,
+    body.ui-hidden #hint,
+    body.ui-hidden #panel,
+    body.ui-hidden #rotate-hint { display: none; }
+    /* 虚拟按钮：仅移动端显示，点击切换 UI 显隐 */
+    #ui-toggle-btn {
+      position: fixed; right: 14px; bottom: 14px; z-index: 60;
+      padding: 8px 14px; border-radius: 16px;
+      border: 1px solid rgba(159, 232, 255, 0.4); color: #9fe8ff;
+      background: rgba(4, 14, 24, 0.5);
+      font: 13px "Microsoft YaHei", system-ui, sans-serif; display: none;
+    }
+    body.mobile #ui-toggle-btn { display: block; }
 
     @keyframes rotate-pulse {
 
@@ -212,7 +222,8 @@
     <div class="row"><span class="label">视角</span><span class="val" id="mode">环绕</span></div>
     <div class="row"><span class="label">状态</span><span class="val" id="state">运行</span></div>
   </div>
-  <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图</div>
+  <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图 · H 隐藏UI</div>
+  <button id="ui-toggle-btn">UI</button>
   <div id="rotate-hint">
     <div class="icon">↻</div>
     <div>建议横屏观看</div>

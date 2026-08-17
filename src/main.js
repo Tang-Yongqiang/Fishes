@@ -372,7 +372,7 @@ if (FEATURES.screenshot && !isMobile) {
 // 中心与鱼缸中心对齐：相机拉近时时钟视觉变大（缸内特写），拉远时相对缸变小；
 // depthTest 默认开启 → 鱼游到时钟前方/后方有正确遮挡（景深）。
 // 纹理用 1024 宽高清渲染（512 放大到屏幕会模糊），字体选粗黑体（Roboto/无衬线）。
-let clockCtx = null, clockTex = null, lastClockSec = -1;
+let clockCtx = null, clockTex = null, lastClockSec = -1, clockObj = null;
 
 function drawClock(now) {
   if (!clockCtx) return;
@@ -424,6 +424,7 @@ if (FEATURES.clock) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: cTex, ...depthMat }));
     sprite.scale.set(56, 19.7, 1);
     sprite.position.set(0, 13, 0);
+    clockObj = sprite;
     scene.add(sprite);
   } else {
     // 固定朝向：PlaneGeometry 法线默认 +Z，面向相机初始位置（相机在 +Z 方向）
@@ -432,9 +433,22 @@ if (FEATURES.clock) {
       new THREE.MeshBasicMaterial({ map: cTex, ...depthMat, side: THREE.DoubleSide })
     );
     mesh.position.set(0, 13, 0);
+    clockObj = mesh;
     scene.add(mesh);
   }
   drawClock(new Date());
+}
+
+// ---- UI 一键隐藏（可选特性）：电脑按 H，手机点虚拟按钮；隐藏全部界面层 + 时钟，沉浸式全屏鱼缸 ----
+let uiHidden = false;
+function toggleUi() {
+  uiHidden = !uiHidden;
+  document.body.classList.toggle('ui-hidden', uiHidden);
+  if (clockObj) clockObj.visible = !uiHidden; // 时钟也一并隐藏（沉浸时不留悬浮面板）
+}
+// 虚拟按钮（移动端显示）：点击切换 UI 显隐
+if (FEATURES.uiToggle) {
+  document.getElementById('ui-toggle-btn')?.addEventListener('click', toggleUi);
 }
 
 // ---- PWA（可选特性）：注册 Service Worker，首次在线缓存资源，之后离线运行 ----
@@ -495,6 +509,8 @@ window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
   } else if (e.key === 'f' || e.key === 'F') {
     setCameraMode(cameraMode === 'orbit' ? 'first' : 'orbit');
+  } else if (e.key === 'h' || e.key === 'H') {
+    if (FEATURES.uiToggle) toggleUi(); // UI 一键隐藏/显示
   } else if (e.key === 'Tab') {
     e.preventDefault();
     if (cameraMode === 'first') {
