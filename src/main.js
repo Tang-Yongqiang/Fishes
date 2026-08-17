@@ -1,9 +1,9 @@
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import modelUrl from '../models/XH378sJqtgOHKGAXMdeNF.stl?url';
 import { FEATURES, PARAMS, WORLD } from './config.js';
+import { createCreatures, updateCreatures } from './creatures.js';
 import { createFish, loadFishModel, randomPoint, updateFish } from './fish.js';
 import { buildTank, TANK } from './tank.js';
-import { createCreatures, updateCreatures } from './creatures.js';
 
 // 移动端检测：手机/平板仅做展示。
 // 1) Capacitor 打包的 APK 内 window.Capacitor 必然存在 → 强制移动端（避免 WebView UA 差异）；
@@ -372,7 +372,7 @@ if (FEATURES.screenshot && !isMobile) {
 // 中心与鱼缸中心对齐：相机拉近时时钟视觉变大（缸内特写），拉远时相对缸变小；
 // depthTest 默认开启 → 鱼游到时钟前方/后方有正确遮挡（景深）。
 // 纹理用 1024 宽高清渲染（512 放大到屏幕会模糊），字体选粗黑体（Roboto/无衬线）。
-let clockCtx = null, clockTex = null, lastClockSec = -1, clockObj = null;
+let clockCtx = null, clockTex = null, lastClockSec = -1;
 
 function drawClock(now) {
   if (!clockCtx) return;
@@ -424,7 +424,6 @@ if (FEATURES.clock) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: cTex, ...depthMat }));
     sprite.scale.set(56, 19.7, 1);
     sprite.position.set(0, 13, 0);
-    clockObj = sprite;
     scene.add(sprite);
   } else {
     // 固定朝向：PlaneGeometry 法线默认 +Z，面向相机初始位置（相机在 +Z 方向）
@@ -433,18 +432,16 @@ if (FEATURES.clock) {
       new THREE.MeshBasicMaterial({ map: cTex, ...depthMat, side: THREE.DoubleSide })
     );
     mesh.position.set(0, 13, 0);
-    clockObj = mesh;
     scene.add(mesh);
   }
   drawClock(new Date());
 }
 
-// ---- UI 一键隐藏（可选特性）：电脑按 H，手机点虚拟按钮；隐藏全部界面层 + 时钟，沉浸式全屏鱼缸 ----
+// ---- UI 一键隐藏（可选特性）：电脑按 H，手机点虚拟按钮；隐藏全部界面层，仅保留时钟（时钟生态缸核心）----
 let uiHidden = false;
 function toggleUi() {
   uiHidden = !uiHidden;
   document.body.classList.toggle('ui-hidden', uiHidden);
-  if (clockObj) clockObj.visible = !uiHidden; // 时钟也一并隐藏（沉浸时不留悬浮面板）
 }
 // 虚拟按钮（移动端显示）：点击切换 UI 显隐
 if (FEATURES.uiToggle) {
