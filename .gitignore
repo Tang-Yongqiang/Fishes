@@ -2,3 +2,5 @@ node_modules/
 dist/
 .DS_Store
 *.log
+# Capacitor / Android 构建产物（仅 mobile-showcase 分支维护 android 平台源码）
+android/

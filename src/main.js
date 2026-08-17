@@ -343,35 +343,36 @@ let clockCtx = null, clockTex = null, lastClockSec = -1;
 function drawClock(now) {
   if (!clockCtx) return;
   const c = clockCtx;
-  c.clearRect(0, 0, 512, 180);
-  // 半透明圆角底板
+  c.clearRect(0, 0, 1024, 360);
+  // 半透明圆角底板（留足内边距，确保数字+发光完全在框内）
   c.fillStyle = 'rgba(4, 14, 24, 0.5)';
   c.beginPath();
-  c.roundRect(8, 8, 496, 164, 22);
+  c.roundRect(24, 24, 976, 312, 48);
   c.fill();
-  c.strokeStyle = 'rgba(127, 232, 255, 0.35)';
-  c.lineWidth = 4;
+  c.strokeStyle = 'rgba(127, 232, 255, 0.3)';
+  c.lineWidth = 6;
   c.stroke();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
+  // 字号 200：数字总宽约 870px，居中后两侧留 ~76px，含发光也不超出底板
   c.fillStyle = '#9fe8ff';
-  // 字号 100：8 个等宽字符（HH:MM:SS）≈ 480px < 512 画布宽，避免两端数字被裁掉
-  c.font = '900 100px "Courier New", Consolas, monospace';
+  c.font = '900 200px "Roboto", "Droid Sans", "Noto Sans", "Segoe UI", "Arial", sans-serif';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  c.shadowColor = 'rgba(120, 225, 255, 0.6)';
-  c.shadowBlur = 20;
-  c.fillText(`${hh}:${mm}:${ss}`, 256, 90);
+  c.shadowColor = 'rgba(120, 225, 255, 0.55)';
+  c.shadowBlur = 28;
+  c.fillText(`${hh}:${mm}:${ss}`, 512, 180);
   c.shadowBlur = 0;
   clockTex.needsUpdate = true;
 }
 if (FEATURES.clock) {
   const clockCanvas = document.createElement('canvas');
-  clockCanvas.width = 512;
-  clockCanvas.height = 180;
+  clockCanvas.width = 1024; // 高清纹理：放大到屏幕仍锐利
+  clockCanvas.height = 360;
   clockCtx = clockCanvas.getContext('2d');
   clockTex = new THREE.CanvasTexture(clockCanvas);
+  clockTex.anisotropy = 8; // 各向异性过滤：任何视角下都保持锐利
   const cTex = clockTex;
   const depthMat = { transparent: true, depthWrite: false }; // depthTest 默认开（景深）
   if (FEATURES.clockFace === 'camera') {
