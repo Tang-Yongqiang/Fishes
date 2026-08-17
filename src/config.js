@@ -16,6 +16,8 @@ export const FEATURES = {
   clock: true,      // 数字时钟：鱼缸中央悬浮显示 HH:MM:SS
   clockFace: 'fixed', // 时钟朝向：'fixed' 固定方向（面向相机初始位置）| 'camera' 始终面对镜头
   pwa: true,        // PWA：Service Worker 离线缓存 + manifest（添加到主屏幕离线运行）
+  fishPlay: true,   // 鱼群行为升级：追逐嬉戏 / 惊散反应 / 队形变换
+  creatures: true,  // 微小生物：缸底小虾爬动 + 扬沙颗粒
 };
 
 export const PARAMS = {
@@ -56,6 +58,16 @@ export const PARAMS = {
   // ---- 喂食 ----
   FOOD_ATTRACT: 3.0,    // 食物吸引力强度
   FOOD_SIGHT: 7.0,      // 鱼能看到食物的距离
+
+  // ---- 鱼群行为升级 ----
+  CHASE_STR: 2.4,       // 追逐/逃逸推动力
+  CHASE_SPEED: 1.55,    // 追逐时巡航速度倍率（追者）
+  FLED_SPEED: 1.3,      // 追逐时巡航速度倍率（逃者）
+  CHASE_DURATION: 5,    // 单次追逐持续时间（秒）
+  SCATTER_R: 7.0,       // 惊散半径（鱼食落水/干扰）
+  SCATTER_FORCE: 5.5,   // 惊散力
+  SCATTER_TIME: 0.7,    // 惊散持续时间（秒）
+  FORMATION_STR: 0.8,   // 队形变换强度
 };
 
 // 共享运行时状态（各功能写入/读取）
@@ -63,4 +75,6 @@ export const WORLD = {
   foods: [],           // 食物粒子 [{ pos, vy, t }]
   predator: null,      // 掠食者 { group, pos, vel, radius }
   obstacles: [],       // 装饰障碍 [{ pos, radius }]
+  scatterSource: null, // 惊散源位置（鱼食落水等触发）
+  scatterUntil: -1,    // 惊散结束时间（全局时间秒）
 };

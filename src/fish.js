@@ -27,6 +27,12 @@ const VISUAL_RAYS = [-55, -27, 0, 27, 55]; // 视野锥采样偏角（度，相�
 const DEBUG_AVOID = false;
 let debugFrame = 0;
 
+// ---- 鱼群行为升级（可选特性）共享状态 ----
+let chasePair = null;    // { chaser, fleer, t } 正在追逐的一对鱼
+let chaseTimer = 8;      // 距离下次触发追逐的倒计时
+let formationPhase = 0;  // 队形相位（周期性变化 → 队形变换）
+let formationTimer = 18; // 距离下次队形变换的倒计时
+
 /**
  * 鱼身轮廓半径（t: 0=头 … 1=尾），分段线性插值出流线型
  */
@@ -383,10 +389,34 @@ export function updateFish(fish, time, dt, fishes) {
     RATE_MATCH, RATE_BIAS,
     BOUNDARY_MARGIN, BOUNDARY_FORCE, VISUAL_SIGHT, VISUAL_GAIN,
     FOLLOW_RATE, SWAY_FREQ, MAX_SWAY_FREQ, SWAY_AMP, TAIL_AMP,
+    CHASE_STR, CHASE_SPEED, FLED_SPEED, SCATTER_R, SCATTER_FORCE, FORMATION_STR,
   } = PARAMS;
   const FOV_COS = Math.cos(PARAMS.FOV_DEG / 2 * Math.PI / 180);
   const MAX_PITCH = PARAMS.MAX_PITCH_DEG * Math.PI / 180;
   const MAX_BEND = PARAMS.MAX_BEND_DEG * Math.PI / 180;
+
+  // ---- 鱼群行为升级：全局调度（仅由首条非掠食者鱼驱动，避免重复计次）----
+  if (FEATURES.fishPlay && ud.index === 0 && !ud.isPredator) {
+    chaseTimer -= dt;
+    if (chaseTimer <= 0) {
+      if (!chasePair && fishes.length > 2) {
+        let a = fishes[(Math.random() * fishes.length) | 0];
+        let b = fishes[(Math.random() * fishes.length) | 0];
+        while (b === a) b = fishes[(Math.random() * fishes.length) | 0];
+        chasePair = { chaser: a, fleer: b, t: PARAMS.CHASE_DURATION };
+      }
+      chaseTimer = 12 + Math.random() * 18;
+    }
+    if (chasePair) {
+      chasePair.t -= dt;
+      if (chasePair.t <= 0) chasePair = null;
+    }
+    formationTimer -= dt;
+    if (formationTimer <= 0) {
+      formationPhase = Math.random() * Math.PI * 2;
+      formationTimer = 18 + Math.random() * 20;
+    }
+  }
 
   // ---- 感知邻居：视野锥过滤 + 最近邻排序 ----
   tmpSep.set(0, 0, 0);
@@ -467,12 +497,35 @@ export function updateFish(fish, time, dt, fishes) {
     tmpAcc.z += Math.cos(time * 0.6 + ud.phase) * WANDER * randScale;
   }
 
+  // ---- 队形变换（可选特性）：周期性改变全局队形相位，鱼群按相位同步转向换队形 ----
+  if (FEATURES.fishPlay && !ud.isPredator) {
+    const rs = 1 - avoid;
+    const fp = formationPhase + ud.index * 0.6;
+    tmpAcc.x += Math.sin(fp) * FORMATION_STR * rs;
+    tmpAcc.z += Math.cos(fp) * FORMATION_STR * rs;
+  }
+
+  // ---- 追逐嬉戏（可选特性）：两条鱼相互追逐、加速冲刺，打破匀速游动的单调 ----
+  let cruiseTarget = ud.cruise;
+  if (FEATURES.fishPlay && !ud.isPredator && chasePair) {
+    if (chasePair.chaser === fish) {
+      cruiseTarget = ud.speed * CHASE_SPEED; // 追者加速
+      tmpV.subVectors(chasePair.fleer.position, pos).normalize().multiplyScalar(CHASE_STR);
+      tmpAcc.add(tmpV);
+    } else if (chasePair.fleer === fish) {
+      cruiseTarget = ud.speed * FLED_SPEED; // 被追者加速逃离
+      tmpV.subVectors(pos, chasePair.chaser.position);
+      if (tmpV.lengthSq() > 1e-6) tmpV.normalize().multiplyScalar(CHASE_STR * 0.9);
+      tmpAcc.add(tmpV);
+    }
+  }
+
   // ---- 巡航保持：把速度拉回巡航速度 ----
   // 防止单条鱼（无群游力）或边界转向时减速到静止，导致 head 朝向失稳原地打转
   const keep = 1 - Math.pow(1 - CRUISE_KEEP, dt * 60);
   tmpV.copy(vel);
   if (tmpV.lengthSq() < 1e-8) tmpV.set(0, 0, 1).applyQuaternion(ud.bones[0].quaternion); // vel≈0 时用头部朝向
-  tmpV.normalize().multiplyScalar(ud.cruise).sub(vel).multiplyScalar(keep);
+  tmpV.normalize().multiplyScalar(cruiseTarget).sub(vel).multiplyScalar(keep);
   tmpAcc.add(tmpV);
 
   // ---- 软边界：把鱼拉回范围内 ----
@@ -551,6 +604,16 @@ export function updateFish(fish, time, dt, fishes) {
         tmpV.normalize().multiplyScalar(3.2 * (1 - d / reach));
         tmpAcc.add(tmpV);
       }
+    }
+  }
+
+  // ---- 惊散反应（可选特性）：鱼食落水/干扰源附近的鱼群瞬间散开再聚拢 ----
+  if (FEATURES.fishPlay && !ud.isPredator && WORLD.scatterSource && time < WORLD.scatterUntil) {
+    tmpV.subVectors(pos, WORLD.scatterSource);
+    const d = tmpV.length();
+    if (d < SCATTER_R && d > 1e-6) {
+      tmpV.normalize().multiplyScalar(SCATTER_FORCE * (1 - d / SCATTER_R));
+      tmpAcc.add(tmpV);
     }
   }
 

@@ -3,6 +3,7 @@ import modelUrl from '../models/XH378sJqtgOHKGAXMdeNF.stl?url';
 import { FEATURES, PARAMS, WORLD } from './config.js';
 import { createFish, loadFishModel, randomPoint, updateFish } from './fish.js';
 import { buildTank, TANK } from './tank.js';
+import { createCreatures, updateCreatures } from './creatures.js';
 
 // 移动端检测：手机/平板仅做展示。
 // 1) Capacitor 打包的 APK 内 window.Capacitor 必然存在 → 强制移动端（避免 WebView UA 差异）；
@@ -90,6 +91,9 @@ controls.mouseButtons = {
 // ---- 鱼缸 ----
 const tank = buildTank(scene);
 
+// ---- 微小生物（可选特性）：缸底小虾爬行 + 扬沙 ----
+const creatures = createCreatures(scene, tank);
+
 // ---- 光照：环境光 + 主方向光（产生鱼身高光反射）----
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 const sun = new THREE.DirectionalLight(0xffffff, 2.6);
@@ -173,6 +177,11 @@ if (FEATURES.feeding && !isMobile) {
     mesh.position.set(bx, waterY + 0.8, bz); // 从该位置水面稍上方落入
     scene.add(mesh);
     WORLD.foods.push({ pos: mesh.position, t: 0, phase: Math.random() * Math.PI * 2, vy: 0, falling: true, mesh });
+    // 鱼群行为升级（可选特性）：鱼食落水附近鱼群瞬间惊散再聚拢
+    if (FEATURES.fishPlay) {
+      WORLD.scatterSource = new THREE.Vector3(bx, waterY + 1, bz);
+      WORLD.scatterUntil = globalT + PARAMS.SCATTER_TIME;
+    }
   });
 }
 
@@ -501,6 +510,7 @@ window.addEventListener('keyup', (e) => {
 // ---- 主循环 ----
 const timer = new THREE.Timer();
 let lastFrameMs = 0; // 移动端帧率上限（省电）的上次渲染时间戳
+let globalT = 0;     // 全局时间（供事件监听器读取，用于惊散等临时状态）
 const mvFwd = new THREE.Vector3();  // WASD：相机水平前方向
 const mvRight = new THREE.Vector3(); // WASD：相机水平右方向
 const mvDelta = new THREE.Vector3(); // WASD：移动增量
@@ -517,6 +527,7 @@ renderer.setAnimationLoop(() => {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.05);
   const t = timer.getElapsed();
+  globalT = t;
 
   // ---- 数字时钟（可选特性）：秒数变化时重绘 ----
   if (FEATURES.clock) {
@@ -529,6 +540,8 @@ renderer.setAnimationLoop(() => {
 
   if (!paused) {
     for (const f of fishes) updateFish(f, t, dt, fishes);
+    // 微小生物（可选特性）：小虾爬行 + 扬沙
+    updateCreatures(creatures, tank, dt);
     // 鱼食：从上方落入水面→漂浮，鱼嘴碰到即被吃，1 分钟后自动消失（可选特性）
     if (FEATURES.feeding && WORLD.foods.length) {
       const waterY = TANK.BOTTOM + TANK.H - 0.6;
