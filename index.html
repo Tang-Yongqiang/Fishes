@@ -3,7 +3,13 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <meta name="theme-color" content="#0a1a26" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>3D 鱼缸</title>
   <style>
     * {
@@ -124,11 +130,65 @@
       color: #9fe8ff;
       font-weight: 600;
     }
+
+    /* 移动端展示：隐藏键盘操作提示，精简 HUD */
+    /* 注意：必须用 body.mobile 判定而非 max-width，手机横屏时 CSS 宽度常 >768px 会令媒体查询失效 */
+    body.mobile #hint {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      #hint {
+        display: none;
+      }
+
+      #hud {
+        top: 8px;
+        left: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+        min-width: 128px;
+      }
+    }
+
+    /* 竖屏提示：引导旋转至横屏（横屏自动消失） */
+    #rotate-hint {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(5, 12, 20, 0.85);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: #9fe8ff;
+      font: 16px/1.6 "Microsoft YaHei", system-ui, sans-serif;
+      text-align: center;
+      user-select: none;
+    }
+
+    #rotate-hint .icon {
+      font-size: 46px;
+      animation: rotate-pulse 1.6s ease-in-out infinite;
+    }
+
+    #rotate-hint .sub {
+      color: rgba(159, 232, 255, 0.6);
+      font-size: 13px;
+    }
+
+    #rotate-hint button {
+      margin-top: 8px; padding: 8px 22px; border-radius: 20px;
+      border: 1px solid rgba(159, 232, 255, 0.5); color: #9fe8ff;
+      background: rgba(159, 232, 255, 0.08); font: 14px "Microsoft YaHei", system-ui, sans-serif;
+    }
     /* UI 一键隐藏（可选特性）：body.ui-hidden 时隐藏全部界面层，只留鱼缸 */
     body.ui-hidden #hud,
     body.ui-hidden #hint,
-    body.ui-hidden #panel { display: none; }
-    /* 虚拟按钮：移动端显示（PC 端按 H 键） */
+    body.ui-hidden #panel,
+    body.ui-hidden #rotate-hint { display: none; }
+    /* 虚拟按钮：仅移动端显示，点击切换 UI 显隐 */
     #ui-toggle-btn {
       position: fixed; right: 14px; bottom: 14px; z-index: 60;
       padding: 8px 14px; border-radius: 16px;
@@ -137,10 +197,46 @@
       font: 13px "Microsoft YaHei", system-ui, sans-serif; display: none;
     }
     body.mobile #ui-toggle-btn { display: block; }
+
+    @keyframes rotate-pulse {
+
+      0%,
+      100% {
+        transform: rotate(0deg);
+      }
+
+      50% {
+        transform: rotate(90deg);
+      }
+    }
+
+    @media (orientation: portrait) {
+      body.mobile #rotate-hint {
+        display: flex;
+      }
+    }
+
+    /* 入场淡入：覆盖全屏，从鱼缸底色渐出，动画结束后不影响交互 */
+    #fade-in {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: #081018;
+      pointer-events: none;
+      animation: fade-enter 1.2s ease-out forwards;
+    }
+
+    @keyframes fade-enter {
+      0%   { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
   </style>
 </head>
 
 <body>
+  <!-- 入场淡入遮罩：从全黑渐显出鱼缸，纯 CSS 动画，不依赖 JS -->
+  <div id="fade-in"></div>
   <div id="app"></div>
   <div id="hud">
     <div class="row"><span class="label">渲染 API</span><span class="val" id="api">检测中…</span></div>
@@ -151,6 +247,12 @@
   </div>
   <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图 · H 隐藏UI</div>
   <button id="ui-toggle-btn">UI</button>
+  <div id="rotate-hint">
+    <div class="icon">↻</div>
+    <div>建议横屏观看</div>
+    <div class="sub">旋转手机至横屏（提示自动消失），或点击下方继续竖屏浏览</div>
+    <button id="continue-portrait">竖屏继续</button>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 

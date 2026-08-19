@@ -1,0 +1,8 @@
+{
+  "appId": "com.fishtank.app",
+  "appName": "3D鱼缸",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

@@ -5,20 +5,28 @@
  * - PARAMS：可调参数，实时参数面板直接修改，引擎每帧读取，无需重启。
  * - WORLD：各功能共享的运行时状态（食物、掠食者、障碍物等）。
  */
+// 移动端检测（与 main.js 保持一致，避免 Capacitor WebView UA 差异）
+const _isMobile = (typeof window !== 'undefined') && (
+  !!window.Capacitor || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator?.userAgent || '')
+);
+
 export const FEATURES = {
-  feeding: true,    // 点击喂食：点击缸内位置撒食，鱼群游过去抢食
-  bubbles: true,    // 气泡：随机上升的气泡粒子
-  decor: true,      // 水草/装饰：缸底静态装饰，鱼用障碍回避绕行
-  caustics: true,   // 水面光斑：缸底动态光斑投影
-  predator: false,   // 掠食者：一条大鱼追逐鱼群，鱼群四散逃避（暂关闭）
-  panel: true,      // 实时参数面板：拖动条调节各项参数
-  screenshot: true, // 截图导出：按 P 保存当前画面为 PNG
-  clock: true,      // 数字时钟：鱼缸中央悬浮显示 HH:MM:SS
-  clockFace: 'fixed', // 时钟朝向：'fixed' 固定方向（面向相机初始位置）| 'camera' 始终面对镜头
-  pwa: true,        // PWA：Service Worker 离线缓存 + manifest（添加到主屏幕离线运行）
-  fishPlay: true,   // 鱼群行为升级：追逐嬉戏 / 惊散反应 / 队形变换
-  creatures: true,  // 微小生物：缸底小虾爬动 + 扬沙颗粒
-  uiToggle: true,   // UI 一键隐藏：电脑按 H，手机端虚拟按钮（沉浸式全屏鱼缸）
+  feeding: !_isMobile,  // 点击喂食：移动端无此交互，关闭省资源
+  // 气泡：移动端关闭（小屏幕存在感极低，省 40 粒子的每帧 sin 计算 + DrawCall）
+  bubbles: !_isMobile,
+  decor: true,          // 水草/装饰：静态，开销极小，保留视觉层次
+  caustics: !_isMobile, // 水面光斑：移动端已在 main.js 关，这里同步开关声明
+  predator: false,       // 掠食者：暂关闭
+  panel: true,          // 实时参数面板（仅桌面，main.js 已按 isMobile 屏蔽 DOM）
+  screenshot: true,     // 截图导出（仅桌面）
+  clock: true,          // 数字时钟：时钟生态缸核心，必须保留
+  clockFace: 'fixed',   // 时钟朝向
+  pwa: true,            // PWA：离线缓存
+  // 鱼群嬉戏追逐：移动端关闭，省追逐对调度 + 全局队形相位等额外逻辑
+  fishPlay: !_isMobile,
+  // 缸底小虾爬动+扬沙：移动端小屏幕几乎注意不到，关闭省 ~8% CPU
+  creatures: !_isMobile,
+  uiToggle: true,       // UI 一键隐藏：移动端核心功能，保留
 };
 
 export const PARAMS = {
