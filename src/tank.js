@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
 // 活动范围尺寸常量（调试模式仅用线框标出）
-export const TANK = { W: 72, H: 32, D: 40, BOTTOM: -3 };
+// 深度 D 与宽度 W 相同（72×32×72）：正面观感饱满，鱼群前后穿游空间充足
+export const TANK = { W: 72, H: 32, D: 72, BOTTOM: -3 };
 
 /**
  * 调试模式：只画一个长方体线框，标出鱼的活动范围

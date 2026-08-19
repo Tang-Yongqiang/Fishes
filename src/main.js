@@ -55,7 +55,12 @@ try {
   });
 }
 
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// 移动端像素密度限 1.5：GPU 像素填充量从 4x → 2.25x，省约 44% GPU 负载，
+// 5 英寸屏幕上人眼 1.5 与 2 的锐度差异几乎不可察觉。
+renderer.setPixelRatio(isMobile
+  ? Math.min(window.devicePixelRatio, 1.5)
+  : Math.min(window.devicePixelRatio, 2)
+);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 appEl.appendChild(renderer.domElement);
@@ -71,7 +76,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   400
 );
-camera.position.set(0, 22, 110);
+camera.position.set(0, isMobile ? 20 : 22, isMobile ? 60 : 110);
 camera.lookAt(0, 10, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -107,21 +112,38 @@ scene.add(fill);
 // ---- 加载 STL 鱼模型（蒙皮到骨骼链）----
 const fishModel = await loadFishModel(modelUrl);
 
+// ---- 移动端视觉增强 ----
+// 鱼放大：骨骼/蒙皮/碰撞半径等比放大，物理行为比例不变，手机屏上更醒目
+const fishSize = isMobile ? 1.9 : 1.0;
+// 鱼放大后更占空间：移动端降低凝聚、增大分离/随机游走，让鱼群散开游动不聚成一团
+if (isMobile) {
+  PARAMS.W_COH = 0.25;   // 凝聚 0.4 → 0.25
+  PARAMS.W_SEP = 3.6;    // 分离 3.2 → 3.6
+  PARAMS.WANDER = 0.4;   // 随机游走 0.3 → 0.4
+}
+
 // ---- 鱼群（体型统一，保留颜色与速度差异）----
+// 移动端按屏幕尺寸分级减少鱼群数量：Boids 为 O(n²)，降数量可显著降 CPU+GPU 负载，
+// 同时小屏幕上 30 条和 60 条视觉丰满度差异不大。
+const fishCountScale = isMobile
+  ? (window.innerWidth < 800 ? 0.55 : 0.7)   // 竖屏/小屏 55%，横屏大屏 70%
+  : 1.0;
+
 const fishes = [];
 const fishSpecs = [
-  { color: 0xff7043, speed: 2.9, count: 12 },
-  { color: 0x26c6da, speed: 3.4, count: 15 },
-  { color: 0xffca28, speed: 3.1, count: 12 },
-  { color: 0xec407a, speed: 3.1, count: 9 },
-  { color: 0x8e24aa, speed: 3.8, count: 9 },
-  { color: 0xff8a65, speed: 2.0, count: 3 },
+  { color: 0xff7043, speed: 2.9, count: Math.max(1, Math.round(12 * fishCountScale)) },
+  { color: 0x26c6da, speed: 3.4, count: Math.max(1, Math.round(15 * fishCountScale)) },
+  { color: 0xffca28, speed: 3.1, count: Math.max(1, Math.round(12 * fishCountScale)) },
+  { color: 0xec407a, speed: 3.1, count: Math.max(1, Math.round(9  * fishCountScale)) },
+  { color: 0x8e24aa, speed: 3.8, count: Math.max(1, Math.round(9  * fishCountScale)) },
+  { color: 0xff8a65, speed: 2.0, count: Math.max(1, Math.round(3  * fishCountScale)) },
 ];
 for (const spec of fishSpecs) {
   for (let i = 0; i < spec.count; i++) {
     const fish = createFish({
       color: spec.color,
       speed: spec.speed, // 同群巡航速度一致（群内协调游动）
+      size: fishSize,    // 移动端放大，手机屏上鱼更醒目
       bounds: tank.bounds,
       modelGeo: fishModel,
     });
@@ -249,10 +271,10 @@ if (FEATURES.bubbles) {
 const grassMeshes = [];
 if (FEATURES.decor) {
   const by0 = tank.bounds.y[0];
-  // 石头（障碍物）
+  // 石头（障碍物）——位置适配深度 72 的 z 范围（±35.2），前后排布拉开纵深
   const rockGeo = new THREE.SphereGeometry(0.7, 10, 8);
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b7a52, roughness: 0.9 });
-  const rockSpots = [[-26, -14], [26, 12], [18, -15], [-20, 15], [0, 17]];
+  const rockSpots = [[-26, -20], [26, 18], [18, -25], [-20, 22], [0, 20]];
   for (const [x, z] of rockSpots) {
     const rock = new THREE.Mesh(rockGeo, rockMat);
     rock.position.set(x, by0 + 0.25, z);
@@ -373,6 +395,7 @@ if (FEATURES.screenshot && !isMobile) {
 // depthTest 默认开启 → 鱼游到时钟前方/后方有正确遮挡（景深）。
 // 纹理用 1024 宽高清渲染（512 放大到屏幕会模糊），字体选粗黑体（Roboto/无衬线）。
 let clockCtx = null, clockTex = null, lastClockSec = -1;
+let clockBackCtx = null, clockBackTex = null; // 背面镜像钟面（背面看也是正字）
 
 function drawClock(now) {
   if (!clockCtx) return;
@@ -399,16 +422,32 @@ function drawClock(now) {
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.fontVariantNumeric = 'tabular-nums'; // 数字等宽：窄数字(1)不压缩格宽
-  c.shadowColor = 'rgba(120, 225, 255, 0.55)';
-  c.shadowBlur = 28;
+  // 细描边 + 弱发光：小屏上数字轮廓锐利可读，泛光不再发虚
+  c.shadowColor = 'rgba(120, 225, 255, 0.45)';
+  c.shadowBlur = 12;
+  c.lineJoin = 'round';
+  c.lineWidth = 5;
+  c.strokeStyle = 'rgba(4, 18, 30, 0.9)';
   let cx = (1024 - totalW) / 2;
   for (let i = 0; i < 8; i++) {
+    c.strokeText(chars[i], cx + cellW[i] / 2, 180);
     c.fillText(chars[i], cx + cellW[i] / 2, 180);
     cx += cellW[i];
   }
   c.shadowBlur = 0;
   c.shadowColor = 'transparent';
   clockTex.needsUpdate = true;
+  // 同步背面镜像：水平翻转绘制，使从背面看数字也为正立可读
+  if (clockBackCtx) {
+    const bc = clockBackCtx;
+    bc.clearRect(0, 0, 1024, 360);
+    bc.save();
+    bc.translate(1024, 0);
+    bc.scale(-1, 1);
+    bc.drawImage(c.canvas, 0, 0);
+    bc.restore();
+    clockBackTex.needsUpdate = true;
+  }
 }
 if (FEATURES.clock) {
   const clockCanvas = document.createElement('canvas');
@@ -418,21 +457,44 @@ if (FEATURES.clock) {
   clockTex = new THREE.CanvasTexture(clockCanvas);
   clockTex.anisotropy = 8; // 各向异性过滤：任何视角下都保持锐利
   const cTex = clockTex;
+  // 时钟大小：移动端放大到接近鱼缸内尺寸（宽 68），整缸即表盘，鱼在其前后穿游
+  const CLOCK_W = isMobile ? 68 : 56;
+  const CLOCK_H = CLOCK_W * (360 / 1024); // 保持纹理宽高比（1024:360）
   const depthMat = { transparent: true, depthWrite: false }; // depthTest 默认开（景深）
   if (FEATURES.clockFace === 'camera') {
     // 始终面对镜头（billboard）
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: cTex, ...depthMat }));
-    sprite.scale.set(56, 19.7, 1);
+    sprite.scale.set(CLOCK_W, CLOCK_H, 1);
     sprite.position.set(0, 13, 0);
     scene.add(sprite);
   } else {
-    // 固定朝向：PlaneGeometry 法线默认 +Z，面向相机初始位置（相机在 +Z 方向）
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(56, 19.7),
-      new THREE.MeshBasicMaterial({ map: cTex, ...depthMat, side: THREE.DoubleSide })
+    // 立体时钟：Box 带厚度，任何视角（含从缸顶俯视）都能看到；
+    // 前后各贴独立钟面（FrontSide 不背透），背面用镜像纹理——正反两面看数字都是正的，且互不重叠
+    const boxGeo = new THREE.BoxGeometry(CLOCK_W, CLOCK_H, 2.0);
+    const sideMat = new THREE.MeshStandardMaterial({
+      color: 0x0d2233, roughness: 0.5, metalness: 0.1,
+      transparent: true, opacity: 0.55,
+    });
+    // 正面钟面（面向 +Z）
+    const faceMat = new THREE.MeshBasicMaterial({
+      map: cTex, transparent: true, depthWrite: false, side: THREE.FrontSide,
+    });
+    // 背面钟面（面向 -Z，纹理水平镜像 → 从背面看数字正立）
+    const backCanvas = document.createElement('canvas');
+    backCanvas.width = 1024;
+    backCanvas.height = 360;
+    clockBackCtx = backCanvas.getContext('2d');
+    clockBackTex = new THREE.CanvasTexture(backCanvas);
+    const faceMatBack = new THREE.MeshBasicMaterial({
+      map: clockBackTex, transparent: true, depthWrite: false, side: THREE.FrontSide,
+    });
+    const clockBox = new THREE.Mesh(
+      boxGeo,
+      // 顺序：px nx py ny pz(正面钟面) nz(背面镜像钟面)
+      [sideMat, sideMat, sideMat, sideMat, faceMat, faceMatBack]
     );
-    mesh.position.set(0, 13, 0);
-    scene.add(mesh);
+    clockBox.position.set(0, 13, 0);
+    scene.add(clockBox);
   }
   drawClock(new Date());
 }

@@ -132,6 +132,11 @@
     }
 
     /* 移动端展示：隐藏键盘操作提示，精简 HUD */
+    /* 注意：必须用 body.mobile 判定而非 max-width，手机横屏时 CSS 宽度常 >768px 会令媒体查询失效 */
+    body.mobile #hint {
+      display: none;
+    }
+
     @media (max-width: 768px) {
       #hint {
         display: none;
@@ -210,10 +215,28 @@
         display: flex;
       }
     }
+
+    /* 入场淡入：覆盖全屏，从鱼缸底色渐出，动画结束后不影响交互 */
+    #fade-in {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: #081018;
+      pointer-events: none;
+      animation: fade-enter 1.2s ease-out forwards;
+    }
+
+    @keyframes fade-enter {
+      0%   { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
   </style>
 </head>
 
 <body>
+  <!-- 入场淡入遮罩：从全黑渐显出鱼缸，纯 CSS 动画，不依赖 JS -->
+  <div id="fade-in"></div>
   <div id="app"></div>
   <div id="hud">
     <div class="row"><span class="label">渲染 API</span><span class="val" id="api">检测中…</span></div>
