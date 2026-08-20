@@ -190,6 +190,14 @@ adb shell am start -n com.fishtank.app/.MainActivity   # 安装后直接启动
 - **壁纸模式默认参数（`WP_DEFAULT`）**：`main.js` 定义 `{dist:40, pitch:0, yaw:0, count:80, rngMin:0.3, rngMax:2.0}`；壁纸模式启动即应用（相机 `if(HAS_CAM_ANGLE||isWallpaper)` 走球坐标定位，dist/pitch/yaw 取壁纸默认），URL 显式传参（zoom/pitch/yaw/count/rng）优先覆盖默认。即壁纸默认 = `?wallpaper=1&zoom=40&pitch=0&yaw=0&count=80&rng=0.3:2.0`。非壁纸普通模式不传参则保持原视角（dist 110/pitch≈6.4°/yaw 0）。
 - **鱼大小随机（壁纸模式默认 + ?rng=min:max）**：壁纸模式默认 `SETTINGS.randomSize=true`、范围 `sizeMin=0.3~sizeMax=2.0`；`?rng=0.3:2.0` 可自定义范围（正则 `^\s*([\d.]+)\s*:\s*([\d.]+)\s*$`，合法才覆盖，sizeMin 钳到≥0.1）。非壁纸、未带 rng 则保持普通默认（固定 size 1.0 不随机）。
 
+## 八、GitHub Pages 部署（gh-pages + GitHub Actions）
+
+- **方案**：`npm run build` → Actions 构建 → `actions/deploy-pages` 部署到 gh-pages。push `master` 自动触发（workflow_dispatch 可手动）。
+- **关键：`vite.config.js` 设 `base: './'`**。否则 index.html/manifest/src 等资源用绝对路径 `/xxx`，部署到项目页子路径 `https://<user>.github.io/Fishes/` 下会 404。
+- **workflow 文件**：`.github/workflows/deploy.yml`（permissions: pages write + id-token；concurrency: pages；build+deploy 两 job）。需在 GitHub 仓库 Settings→Pages 把 Source 设为 **GitHub Actions** 而非 gh-pages 分支。
+- **PWA sw.js**：`main.js` 里 `serviceWorker.register('/sw.js')` 是绝对路径，子路径部署会 404，但被 `.catch()` 吞掉不影响显示（壁纸场景无需离线，暂未改）。
+- **壁纸公网 URL**：`https://<user>.github.io/Fishes/?wallpaper=1`。
+
 ---
 
-*最后更新：新增壁纸模式（?wallpaper 隐藏全部 UI）+ 记录动态壁纸接入方式。*
+*最后更新：新增壁纸模式/URL参数/默认参数 + GitHub Pages 自动部署（base相对路径+Actions）。*
