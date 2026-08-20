@@ -176,6 +176,20 @@ adb shell am start -n com.fishtank.app/.MainActivity   # 安装后直接启动
 - **数据/GC**：重建时 `f.traverse(o=>{if(o.isMesh){o.geometry?.dispose();o.material?.dispose?.()}})`；掠食者不在 fishes 数组里，重建不受影响。
 - **坑：右键点击也撒食/惊散**。根因：`main.js renderer.domElement` 的 `pointerdown` 监听（feeding 交互）未过滤鼠标按钮，右键(button=2)/中键按下也会触发水面撒食或缸壁惊散。修法：handler 开头 `if (e.button !== 0) return;`，右键/中键保留给 OrbitControls 旋转/平移。
 
+## 七、壁纸模式（桌面动态壁纸：Wallpaper Engine / Lively）
+
+- **用途**：把本页当桌面动态壁纸（网页壁纸类型），WebGL 在壁纸上实时游动。Windows 上需第三方壁纸软件，系统本身不认 HTML。
+- **触发**：URL 带 `?wallpaper`（如 `localhost:5173/?wallpaper=1`）→ `main.js` 用 `new URLSearchParams(location.search).has('wallpaper')` 检测，给 `body` 加 `wallpaper` 类。
+- **隐藏逻辑**：`index.html` CSS `body.wallpaper` 下 `display:none !important` 隐藏 HUD/提示条/实时面板/竖屏提示 + 齿轮按钮 + UI 隐藏按钮 + 设置弹窗。只留鱼缸+数字时钟。
+- **交互保留**：壁纸模式不改动鼠标/交互逻辑（右键旋转·滚轮缩放·点击撒食/惊散仍有效）。能否穿透取决于壁纸软件是否把鼠标事件传给页面（WE 需开启网页壁纸的输入支持；Lively 用手势激活交互）。
+- **用法**：Wallpaper Engine「从网址创建壁纸」→ Website → 填带 `?wallpaper` 的地址。墙纸长期用需页面常驻（`npm run dev` 不会开机自启，需部署或本地托管 `dist/`）。
+- **坑**：壁纸模式只依赖 CSS 隐藏，不必走 JS 的 `toggleUi`；`!important` 确保不被内联/其他规则覆盖。
+- **相机初始缩放（URL ?zoom=<距离>）**：`main.js` 用 `parseFloat(urlParams.get('zoom'))`，合法正数时把相机沿原视线方向（target(0,10,0)→默认相机位）拉到此距离，只改远近不改角度。默认沿用各端默认距离（桌面110/移动60）。仅 URL/壁纸模式生效，普通模式默认不变。可组合 `?wallpaper=1&zoom=60`。
+- **初始朝向角度（URL ?pitch=<俯仰°>&yaw=<方位°>）**：与 ?zoom 统一走球坐标重设相机初始位（target 恒 (0,10,0)）。`pitch`：0=水平、90=正上方俯视（默认≈6.4°）；`yaw`：0=正面朝向 +z、按度转方位角（默认 0）。传哪个覆盖哪个，只传 zoom 行为不变。换算：`polar=(90-pitch)°`、`azimuth=yaw°`，`pos=(0,10,0)+dist·(sin·polar·sin·azimuth, cos·polar, sin·polar·cos·azimuth)`。生效条件 `HAS_CAM_ANGLE = HAS_CAM_DIST||HAS_PITCH||HAS_YAW`。当前旋转范围未限制方位角（可 360°）、俯仰上限 maxPolarAngle=1.55(≈88.8°，接近水平)、无下限（可到正上方垂直看）。
+- **鱼数量（URL ?count=N）**：整数且≥1 时覆盖 `SETTINGS.fishCount`（壁纸默认 80 / 桌面普通 60）。在 `rebuildFish()`（鱼模型加载后首建）之前改，首建即生效。
+- **壁纸模式默认参数（`WP_DEFAULT`）**：`main.js` 定义 `{dist:40, pitch:0, yaw:0, count:80, rngMin:0.3, rngMax:2.0}`；壁纸模式启动即应用（相机 `if(HAS_CAM_ANGLE||isWallpaper)` 走球坐标定位，dist/pitch/yaw 取壁纸默认），URL 显式传参（zoom/pitch/yaw/count/rng）优先覆盖默认。即壁纸默认 = `?wallpaper=1&zoom=40&pitch=0&yaw=0&count=80&rng=0.3:2.0`。非壁纸普通模式不传参则保持原视角（dist 110/pitch≈6.4°/yaw 0）。
+- **鱼大小随机（壁纸模式默认 + ?rng=min:max）**：壁纸模式默认 `SETTINGS.randomSize=true`、范围 `sizeMin=0.3~sizeMax=2.0`；`?rng=0.3:2.0` 可自定义范围（正则 `^\s*([\d.]+)\s*:\s*([\d.]+)\s*$`，合法才覆盖，sizeMin 钳到≥0.1）。非壁纸、未带 rng 则保持普通默认（固定 size 1.0 不随机）。
+
 ---
 
-*最后更新：新增鱼大小/数量设置 + 修复右键误触发撒食。*
+*最后更新：新增壁纸模式（?wallpaper 隐藏全部 UI）+ 记录动态壁纸接入方式。*

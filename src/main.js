@@ -2,7 +2,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import modelUrl from '../models/XH378sJqtgOHKGAXMdeNF.stl?url';
 import { FEATURES, PARAMS, SETTINGS, WORLD } from './config.js';
 import { createCreatures, updateCreatures } from './creatures.js';
-import { createFish, loadFishModel, randomPoint, updateFish, resetShoalState } from './fish.js';
+import { createFish, loadFishModel, randomPoint, resetShoalState, updateFish } from './fish.js';
 import { buildTank, TANK } from './tank.js';
 
 // 移动端检测：手机/平板仅做展示。
@@ -11,6 +11,55 @@ import { buildTank, TANK } from './tank.js';
 const isMobile = !!window.Capacitor
   || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 if (isMobile) document.body.classList.add('mobile'); // 供 CSS 判断（竖屏横屏提示等）
+
+// 壁纸模式：URL 带 ?wallpaper 时（如 Wallpaper Engine / Lively 填 localhost:5173/?wallpaper=1），
+// 启动即隐藏全部 UI（HUD/提示/面板/按钮），只留鱼缸+时钟；交互仍保留（右键旋转/滚轮缩放/点击撒食）。
+const urlParams = new URLSearchParams(location.search);
+const isWallpaper = urlParams.has('wallpaper');
+if (isWallpaper) document.body.classList.add('wallpaper'); // 供 CSS 隐藏界面层
+// 相机初始缩放距离（URL ?zoom=<距离>，仅 URL/壁纸模式生效）：控制镜头到目标点的初始远近，
+// 默认沿用各端默认距离；只在提供了合法正数时覆盖。
+const camDist = parseFloat(urlParams.get('zoom') || '');
+const HAS_CAM_DIST = Number.isFinite(camDist) && camDist > 0;
+// 初始朝向角度（URL ?pitch=<俯仰角°>&yaw=<方位角°>，仅 URL/壁纸模式生效）：
+// pitch 0=水平、90=正上方俯视；yaw 0=正面（朝向 +z）、按度增加方位角。
+const pitchArg = parseFloat(urlParams.get('pitch') || '');
+const yawArg = parseFloat(urlParams.get('yaw') || '');
+const HAS_PITCH = Number.isFinite(pitchArg) && pitchArg >= 0 && pitchArg <= 90;
+const HAS_YAW = Number.isFinite(yawArg) && yawArg >= -720 && yawArg <= 720;
+// 只要传了 zoom/pitch/yaw 任一，就以球坐标统一重设相机初始位（target 恒为 (0,10,0)）
+const HAS_CAM_ANGLE = HAS_CAM_DIST || HAS_PITCH || HAS_YAW;
+
+// ---- URL 参数（壁纸模式/URL 传入；不传则沿用默认，普通模式不受影响）----
+// 壁纸模式默认参数（URL 显式传参可覆盖）：zoom=40, pitch=0, yaw=0, count=80, rng=0.3:2.0
+const WP_DEFAULT = {
+  dist: 40,      // 默认镜头距离
+  pitch: 0,      // 默认俯仰角（°）
+  yaw: 0,        // 默认方位角（°）
+  count: 80,     // 默认鱼数量
+  rngMin: 0.3,   // 默认随机大小下限
+  rngMax: 2.0,   // 默认随机大小上限
+};
+// ?count=N：鱼数量（壁纸默认 80，桌面普通默认 60）
+const countArg = parseInt(urlParams.get('count') || '', 10);
+if (Number.isInteger(countArg) && countArg >= 1) SETTINGS.fishCount = countArg;
+// 鱼大小随机：壁纸模式默认开启（范围 0.3~2.0），?rng=min:max 可自定义范围。
+const rngArg = urlParams.get('rng') || '';
+const rngMatch = rngArg.match(/^\s*([\d.]+)\s*:\s*([\d.]+)\s*$/);
+if (isWallpaper) {
+  SETTINGS.fishCount = WP_DEFAULT.count;
+  SETTINGS.randomSize = true;
+  SETTINGS.sizeMin = WP_DEFAULT.rngMin;
+  SETTINGS.sizeMax = WP_DEFAULT.rngMax;
+}
+if (rngMatch && rngMatch[0].includes(':')) {
+  const rMin = parseFloat(rngMatch[1]), rMax = parseFloat(rngMatch[2]);
+  if (Number.isFinite(rMin) && Number.isFinite(rMax) && rMin > 0 && rMax >= rMin) {
+    SETTINGS.randomSize = true;
+    SETTINGS.sizeMin = Math.max(0.1, rMin);
+    SETTINGS.sizeMax = rMax;
+  }
+}
 
 // 移动端横屏处理：首次触摸尝试锁定横屏（Android 全屏可用，iOS 静默失败）；
 // 提供"竖屏继续"按钮，避免用户被提示遮罩卡住
@@ -79,6 +128,27 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0, isMobile ? 20 : 22, isMobile ? 60 : 110);
 camera.lookAt(0, 10, 0);
 
+// URL ?zoom / ?pitch / ?yaw：以球坐标统一重设相机初始位（target 恒为 (0,10,0)）。
+// 壁纸模式默认 dist=40/pitch=0/yaw=0（即使 URL 未显式传角度也走此定位）；
+// 普通模式显式传参时用原默认视角（桌面 dist≈110 / 移动 60，pitch≈6.4° 俯视，yaw=0 正面）。
+// 传了哪个就覆盖哪个，只传 zoom 时只改远近不改角度。
+if (HAS_CAM_ANGLE || isWallpaper) {
+  const baseDist = isWallpaper ? WP_DEFAULT.dist : (isMobile ? 60 : 110);
+  const basePitch = isWallpaper ? WP_DEFAULT.pitch : 6.37; // 默认俯仰角（°），维持原视角
+  const baseYaw = isWallpaper ? WP_DEFAULT.yaw : 0;        // 默认方位角（°）
+  const dist = HAS_CAM_DIST ? camDist : baseDist;
+  const pitch = HAS_PITCH ? pitchArg : basePitch;
+  const yaw = HAS_YAW ? yawArg : baseYaw;
+  const polar = (90 - pitch) * Math.PI / 180; // polarAngle：0=正上方，90°=水平
+  const azimuth = yaw * Math.PI / 180;        // azimuthAngle 弧度
+  camera.position.set(
+    0 + dist * Math.sin(polar) * Math.sin(azimuth),
+    10 + dist * Math.cos(polar),
+    0 + dist * Math.sin(polar) * Math.cos(azimuth)
+  );
+  camera.lookAt(0, 10, 0);
+}
+
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
@@ -128,9 +198,9 @@ const fishSpecs = [
   { color: 0xff7043, speed: 2.9, weight: 12 },
   { color: 0x26c6da, speed: 3.4, weight: 15 },
   { color: 0xffca28, speed: 3.1, weight: 12 },
-  { color: 0xec407a, speed: 3.1, weight: 9  },
-  { color: 0x8e24aa, speed: 3.8, weight: 9  },
-  { color: 0xff8a65, speed: 2.0, weight: 3  },
+  { color: 0xec407a, speed: 3.1, weight: 9 },
+  { color: 0x8e24aa, speed: 3.8, weight: 9 },
+  { color: 0xff8a65, speed: 2.0, weight: 3 },
 ];
 const totalWeight = fishSpecs.reduce((s, x) => s + x.weight, 0);
 

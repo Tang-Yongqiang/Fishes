@@ -212,6 +212,18 @@
       display: none;
     }
 
+    /* 壁纸模式（?wallpaper）：启动即隐藏全部 UI/按钮，仅保留鱼缸+时钟与鼠标交互。
+       用于 Wallpaper Engine / Lively 等动态壁纸软件加载本页。 */
+    body.wallpaper #hud,
+    body.wallpaper #hint,
+    body.wallpaper #panel,
+    body.wallpaper #rotate-hint,
+    body.wallpaper #ui-toggle-btn,
+    body.wallpaper #settings-btn,
+    body.wallpaper #settings-modal {
+      display: none !important;
+    }
+
     /* UI 隐藏按钮：点击切换 UI 显隐 */
     #ui-toggle-btn {
       position: fixed;
