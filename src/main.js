@@ -1,8 +1,8 @@
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import modelUrl from '../models/XH378sJqtgOHKGAXMdeNF.stl?url';
-import { FEATURES, PARAMS, WORLD } from './config.js';
+import { FEATURES, PARAMS, SETTINGS, WORLD } from './config.js';
 import { createCreatures, updateCreatures } from './creatures.js';
-import { createFish, loadFishModel, randomPoint, updateFish } from './fish.js';
+import { createFish, loadFishModel, randomPoint, updateFish, resetShoalState } from './fish.js';
 import { buildTank, TANK } from './tank.js';
 
 // 移动端检测：手机/平板仅做展示。
@@ -113,8 +113,7 @@ scene.add(fill);
 const fishModel = await loadFishModel(modelUrl);
 
 // ---- 移动端视觉增强 ----
-// 鱼放大：骨骼/蒙皮/碰撞半径等比放大，物理行为比例不变，手机屏上更醒目
-const fishSize = isMobile ? 1.9 : 1.0;
+// 鱼放大：SETTINGS.fishSize 默认移动端 1.9 / 桌面 1.0（骨骼/蒙皮/碰撞半径等比放大）
 // 鱼放大后更占空间：移动端降低凝聚、增大分离/随机游走，让鱼群散开游动不聚成一团
 if (isMobile) {
   PARAMS.W_COH = 0.25;   // 凝聚 0.4 → 0.25
@@ -122,86 +121,165 @@ if (isMobile) {
   PARAMS.WANDER = 0.4;   // 随机游走 0.3 → 0.4
 }
 
-// ---- 鱼群（体型统一，保留颜色与速度差异）----
-// 移动端按屏幕尺寸分级减少鱼群数量：Boids 为 O(n²)，降数量可显著降 CPU+GPU 负载，
-// 同时小屏幕上 30 条和 60 条视觉丰满度差异不大。
-const fishCountScale = isMobile
-  ? (window.innerWidth < 800 ? 0.55 : 0.7)   // 竖屏/小屏 55%，横屏大屏 70%
-  : 1.0;
-
+// ---- 鱼群：按 SETTINGS 生成（体型/数量可经设置弹窗重建）----
+// 各颜色群的相对权重（决定总数在各色之间的分配比例）
 const fishes = [];
 const fishSpecs = [
-  { color: 0xff7043, speed: 2.9, count: Math.max(1, Math.round(12 * fishCountScale)) },
-  { color: 0x26c6da, speed: 3.4, count: Math.max(1, Math.round(15 * fishCountScale)) },
-  { color: 0xffca28, speed: 3.1, count: Math.max(1, Math.round(12 * fishCountScale)) },
-  { color: 0xec407a, speed: 3.1, count: Math.max(1, Math.round(9  * fishCountScale)) },
-  { color: 0x8e24aa, speed: 3.8, count: Math.max(1, Math.round(9  * fishCountScale)) },
-  { color: 0xff8a65, speed: 2.0, count: Math.max(1, Math.round(3  * fishCountScale)) },
+  { color: 0xff7043, speed: 2.9, weight: 12 },
+  { color: 0x26c6da, speed: 3.4, weight: 15 },
+  { color: 0xffca28, speed: 3.1, weight: 12 },
+  { color: 0xec407a, speed: 3.1, weight: 9  },
+  { color: 0x8e24aa, speed: 3.8, weight: 9  },
+  { color: 0xff8a65, speed: 2.0, weight: 3  },
 ];
-for (const spec of fishSpecs) {
-  for (let i = 0; i < spec.count; i++) {
-    const fish = createFish({
-      color: spec.color,
-      speed: spec.speed, // 同群巡航速度一致（群内协调游动）
-      size: fishSize,    // 移动端放大，手机屏上鱼更醒目
-      bounds: tank.bounds,
-      modelGeo: fishModel,
-    });
-    fish.position.copy(randomPoint(tank.bounds));
-    fish.userData.index = fishes.length; // 调试编号（视觉回避诊断用）
-    scene.add(fish);
-    fishes.push(fish);
-  }
+const totalWeight = fishSpecs.reduce((s, x) => s + x.weight, 0);
+
+// 逐条计算本应生成的大小：固定模式用 SETTINGS.fishSize；随机模式在 [sizeMin,sizeMax]×fishSize 内取
+function fishSizeFor() {
+  if (!SETTINGS.randomSize) return SETTINGS.fishSize;
+  return THREE.MathUtils.randFloat(
+    SETTINGS.sizeMin * SETTINGS.fishSize,
+    SETTINGS.sizeMax * SETTINGS.fishSize
+  );
 }
 
-// 点击撒食（可选特性：点击水底撒食，鱼群游过去抢食；移动端仅展示，关闭交互）
-if (FEATURES.feeding && !isMobile) {
-  // 射线与缸体 AABB 求交（slab 法）：点击缸体任意可见位置都能定位到缸内
+// 重建鱼群：清空旧鱼 → 按 SETTINGS.fishCount 分配各色数量 → 重新生成。
+// fishes 保持同一数组引用，update/相机/追逐等闭包自动生效。
+function rebuildFish() {
+  for (const f of fishes) {
+    scene.remove(f);
+    f.traverse((o) => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose?.(); } });
+  }
+  fishes.length = 0;
+  resetShoalState();
+  let assigned = 0;
+  for (let si = 0; si < fishSpecs.length; si++) {
+    const spec = fishSpecs[si];
+    // 最后一群吸收取整误差，保证总数精确等于 SETTINGS.fishCount
+    const count = (si === fishSpecs.length - 1)
+      ? Math.max(0, SETTINGS.fishCount - assigned)
+      : Math.round(SETTINGS.fishCount * spec.weight / totalWeight);
+    for (let i = 0; i < count; i++) {
+      const fish = createFish({
+        color: spec.color,
+        speed: spec.speed,   // 同群巡航速度一致（群内协调游动）
+        size: fishSizeFor(), // 固定 or 随机大小
+        bounds: tank.bounds,
+        modelGeo: fishModel,
+      });
+      fish.position.copy(randomPoint(tank.bounds));
+      fish.userData.index = fishes.length; // 调试编号（视觉回避诊断用）
+      scene.add(fish);
+      fishes.push(fish);
+    }
+    assigned += count;
+  }
+}
+rebuildFish();
+
+// 点击交互（可选特性：桌面鼠标 + 移动端触屏）。
+// 按命中面分派语义：点水面→投食聚拢；点侧壁/缸内→惊散散开。
+let updateRipples = null; // 由下方 feeding 块注入的波纹逐帧更新函数
+if (FEATURES.feeding) {
+  // 射线与缸体 AABB（slab 法）求交，返回进入距离 t 与命中的面法线轴。
+  // axis: 'x'=左右侧壁 'y'=顶/底(y轴取top水面) 'z'=前后侧壁；sign: +1/-1 面朝向
   const rayAABB2 = (origin, dir) => {
     let tMin = -Infinity, tMax = Infinity;
-    for (const axis of ['x', 'y', 'z']) {
-      const mn = tank.bounds[axis][0], mx = tank.bounds[axis][1];
-      const o = origin[axis], d = dir[axis];
+    let axis = null, sign = 0;
+    for (const a of ['x', 'y', 'z']) {
+      const mn = tank.bounds[a][0], mx = tank.bounds[a][1];
+      const o = origin[a], d = dir[a];
       if (Math.abs(d) < 1e-8) {
         if (o < mn || o > mx) return null;
-      } else {
-        let t1 = (mn - o) / d, t2 = (mx - o) / d;
-        if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
-        tMin = Math.max(tMin, t1);
-        tMax = Math.min(tMax, t2);
-        if (tMin > tMax) return null;
+        continue;
       }
+      let t1 = (mn - o) / d, t2 = (mx - o) / d;
+      let s1 = -1, s2 = 1;
+      if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; s1 = 1; s2 = -1; }
+      if (t1 > tMin) { tMin = t1; axis = a; sign = s1; }
+      tMax = Math.min(tMax, t2);
+      if (tMin > tMax) return null;
     }
-    return tMin > 0 ? tMin : (tMax > 0 ? tMax : null);
+    if (tMin < 0 || !isFinite(tMin)) return null;
+    return { t: tMin, axis, sign };
   };
   const foodRay = new THREE.Raycaster();
   const foodPtr = new THREE.Vector2();
   const foodGeo = new THREE.SphereGeometry(0.06, 8, 6);
   const foodMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+  const waterY = TANK.BOTTOM + TANK.H - 0.6;
+  // 敲缸壁的扩散冲击波纹（视觉反馈）
+  const ripples = [];
+  const rippleGeo = new THREE.RingGeometry(0.15, 0.22, 24);
+  // 更新单个波纹，返回是否存活。t: 出生后时间，hitAxis: 壁面法线轴
+  const updateRipple = (r, dt) => {
+    r.t += dt;
+    const life = 0.45; // 波纹持续时长
+    const k = Math.min(r.t / life, 1);          // 0→1 进度
+    const r0 = 0.3, r1 = 3.2;                   // 扩散半径范围
+    r.mesh.scale.setScalar(r0 + (r1 - r0) * k);
+    r.mesh.material.opacity = 0.65 * (1 - k);   // 淡出
+    return r.t < life;
+  };
+  // 每帧由主循环调用，推进并清理波纹
+  updateRipples = (dt) => {
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const alive = updateRipple(ripples[i], dt);
+      if (!alive) {
+        scene.remove(ripples[i].mesh);
+        ripples[i].mesh.geometry.dispose(); // 共享几何用一次即可，避免重复释放
+        ripples.splice(i, 1);
+      }
+    }
+  };
+  // 在命中点生成一个波纹，朝向壁面法线（垂直于命中轴的平面）
+  const spawnRipple = (pos, hitAxis) => {
+    const m = new THREE.Mesh(rippleGeo, new THREE.MeshBasicMaterial({
+      color: 0x9fe8ff, transparent: true, opacity: 0.65, depthWrite: false,
+      side: THREE.DoubleSide,
+    }));
+    m.position.copy(pos);
+    // ring 默认在 XY 平面（法线 +Z）；按 hitAxis 旋转使其贴合壁面
+    if (hitAxis === 'x') m.rotation.y = Math.PI / 2; // 法线对齐 X
+    else if (hitAxis === 'y') m.rotation.x = Math.PI / 2; // 法线对齐 Y
+    // hitAxis==='z' 保持 XY 平面（法线 Z）
+    scene.add(m);
+    ripples.push({ mesh: m, t: 0 });
+  };
   renderer.domElement.addEventListener('pointerdown', (e) => {
+    // 只响应用主键点击（左键/触摸）；右键/中键保留给 OrbitControls 旋转平移，避免误触撒食/惊散
+    if (e.button !== 0) return;
     foodPtr.x = (e.clientX / window.innerWidth) * 2 - 1;
     foodPtr.y = -(e.clientY / window.innerHeight) * 2 + 1;
     foodRay.setFromCamera(foodPtr, camera);
-    const tHit = rayAABB2(foodRay.ray.origin, foodRay.ray.direction);
-    if (tHit === null) return;
-    const p = foodRay.ray.origin.clone().addScaledVector(foodRay.ray.direction, tHit);
-    // 取进入缸体的 x/z（钳制到边界内），鱼食从该位置水面落入
+    const hit = rayAABB2(foodRay.ray.origin, foodRay.ray.direction);
+    if (hit === null) return;
+    const isWaterSurface = hit.axis === 'y' && hit.sign === 1; // 命中顶面（水面/看透水面）
+    // 取命中点的缸内 x/z（钳制到边界内），作为交互作用中心
+    const p = foodRay.ray.origin.clone().addScaledVector(foodRay.ray.direction, hit.t);
     const bx = Math.max(tank.bounds.x[0], Math.min(tank.bounds.x[1], p.x));
     const bz = Math.max(tank.bounds.z[0], Math.min(tank.bounds.z[1], p.z));
-    // 食物数量上限，超出移除最早
-    if (WORLD.foods.length >= 40) {
-      const old = WORLD.foods.shift();
-      scene.remove(old.mesh);
-      old.mesh.geometry.dispose();
-    }
-    const mesh = new THREE.Mesh(foodGeo, foodMat);
-    const waterY = TANK.BOTTOM + TANK.H - 0.6;
-    mesh.position.set(bx, waterY + 0.8, bz); // 从该位置水面稍上方落入
-    scene.add(mesh);
-    WORLD.foods.push({ pos: mesh.position, t: 0, phase: Math.random() * Math.PI * 2, vy: 0, falling: true, mesh });
-    // 鱼群行为升级（可选特性）：鱼食落水附近鱼群瞬间惊散再聚拢
-    if (FEATURES.fishPlay) {
-      WORLD.scatterSource = new THREE.Vector3(bx, waterY + 1, bz);
+
+    if (isWaterSurface) {
+      // ---- 水面：投食 → 附近鱼聚拢抢食（聚鱼效果）----
+      if (WORLD.foods.length >= 40) {
+        const old = WORLD.foods.shift();
+        scene.remove(old.mesh);
+        old.mesh.geometry.dispose();
+      }
+      const mesh = new THREE.Mesh(foodGeo, foodMat);
+      mesh.position.set(bx, waterY + 0.8, bz); // 从该位置水面稍上方落入
+      scene.add(mesh);
+      WORLD.foods.push({ pos: mesh.position, t: 0, phase: Math.random() * Math.PI * 2, vy: 0, falling: true, mesh });
+      // 鱼食落水附近惊散再聚拢
+      if (FEATURES.fishPlay) {
+        WORLD.scatterSource = new THREE.Vector3(bx, waterY + 1, bz);
+        WORLD.scatterUntil = globalT + PARAMS.SCATTER_TIME;
+      }
+    } else {
+      // ---- 侧壁/缸内：敲缸 → 缸壁冲击波纹 + 附近鱼惊散散开 ----
+      spawnRipple(p, hit.axis);
+      WORLD.scatterSource = new THREE.Vector3(bx, p.y, bz);
       WORLD.scatterUntil = globalT + PARAMS.SCATTER_TIME;
     }
   });
@@ -353,7 +431,10 @@ if (FEATURES.panel && !isMobile) {
     ['摆尾幅度', 'SWAY_AMP', 0.02, 0.5, 0.01],
     ['掠食速度', 'PRED_SPEED', 2, 8, 0.2],
   ];
+  const defaults = {};  // key -> 初始默认值（来自 config.js PARAMS）
+  const inputs = [];    // { key, inp, v } 便于恢复默认时统一复位
   for (const [label, key, min, max, step] of sliders) {
+    defaults[key] = PARAMS[key];
     const row = document.createElement('div');
     row.className = 'prow';
     const l = document.createElement('span');
@@ -373,7 +454,20 @@ if (FEATURES.panel && !isMobile) {
     });
     row.append(l, inp, v);
     panel.appendChild(row);
+    inputs.push({ key, inp, v });
   }
+  // 恢复默认：一键把所有滑块/参数复位为 config.js 的初始值
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'preset-btn';
+  resetBtn.textContent = '恢复默认';
+  resetBtn.addEventListener('click', () => {
+    for (const { key, inp, v } of inputs) {
+      PARAMS[key] = defaults[key];
+      inp.value = defaults[key];
+      v.textContent = (+defaults[key]).toFixed(2);
+    }
+  });
+  panel.appendChild(resetBtn);
   document.body.appendChild(panel);
 }
 
@@ -510,6 +604,83 @@ if (FEATURES.uiToggle) {
   document.getElementById('ui-toggle-btn')?.addEventListener('click', toggleUi);
 }
 
+// ---- 设置面板（全端）：齿轮按钮弹出 modal，开关/参数点"确定"才生效 ----
+(function initSettings() {
+  const btn = document.getElementById('settings-btn');
+  const modal = document.getElementById('settings-modal');
+  const scatterChk = document.getElementById('setting-scatter');
+  const okBtn = document.getElementById('settings-ok');
+  const cancelBtn = document.getElementById('settings-cancel');
+  const backdrop = modal?.querySelector('.settings-backdrop');
+  // 鱼数量 / 鱼大小控件
+  const countInput = document.getElementById('setting-count');
+  const countVal = document.getElementById('setting-count-val');
+  const sizeInput = document.getElementById('setting-size');
+  const sizeVal = document.getElementById('setting-size-val');
+  const randomChk = document.getElementById('setting-randomsize');
+  const rangeRow = document.getElementById('setting-size-range');
+  const minInput = document.getElementById('setting-size-min');
+  const minVal = document.getElementById('setting-size-min-val');
+  const maxInput = document.getElementById('setting-size-max');
+  const maxVal = document.getElementById('setting-size-max-val');
+  if (!btn || !modal || !scatterChk) return;
+
+  // 打开：把当前 FEATURES/SETTINGS 值作为草稿填入，尚未生效
+  function openSettings() {
+    scatterChk.checked = !!FEATURES.scatterPanic;
+    countInput.value = SETTINGS.fishCount;
+    countVal.textContent = SETTINGS.fishCount;
+    sizeInput.value = SETTINGS.fishSize;
+    sizeVal.textContent = (+SETTINGS.fishSize).toFixed(1);
+    randomChk.checked = !!SETTINGS.randomSize;
+    minInput.value = SETTINGS.sizeMin;
+    minVal.textContent = (+SETTINGS.sizeMin).toFixed(2);
+    maxInput.value = SETTINGS.sizeMax;
+    maxVal.textContent = (+SETTINGS.sizeMax).toFixed(2);
+    rangeRow.style.display = SETTINGS.randomSize ? '' : 'none';
+    modal.classList.remove('hidden');
+  }
+  function closeSettings() {
+    modal.classList.add('hidden');
+  }
+  // 草稿区实时刷新数值显示 + 随机范围行显隐
+  countInput?.addEventListener('input', () => { countVal.textContent = countInput.value; });
+  sizeInput?.addEventListener('input', () => { sizeVal.textContent = (+sizeInput.value).toFixed(1); });
+  minInput?.addEventListener('input', () => { minVal.textContent = (+minInput.value).toFixed(2); });
+  maxInput?.addEventListener('input', () => { maxVal.textContent = (+maxInput.value).toFixed(2); });
+  randomChk?.addEventListener('change', () => {
+    rangeRow.style.display = randomChk.checked ? '' : 'none';
+  });
+  btn.addEventListener('click', openSettings);
+  // 确定：将草稿写入 FEATURES/SETTINGS；鱼大小/数量变化则重建鱼群后关闭
+  okBtn?.addEventListener('click', () => {
+    const sizeChanged =
+      SETTINGS.fishCount !== +countInput.value ||
+      SETTINGS.fishSize !== +sizeInput.value ||
+      SETTINGS.randomSize !== randomChk.checked ||
+      SETTINGS.sizeMin !== +minInput.value ||
+      SETTINGS.sizeMax !== +maxInput.value;
+    FEATURES.scatterPanic = scatterChk.checked;
+    SETTINGS.fishCount = +countInput.value;
+    SETTINGS.fishSize = +sizeInput.value;
+    SETTINGS.randomSize = randomChk.checked;
+    SETTINGS.sizeMin = +minInput.value;
+    SETTINGS.sizeMax = +maxInput.value;
+    closeSettings();
+    if (sizeChanged) {
+      rebuildFish(); // 重建需 DOM 关闭后再运行，避免面板遮挡
+      // 数量减少时钳制追尾视角的鱼索引，防越界
+      if (cameraMode === 'first' && camFishIndex >= fishes.length) {
+        camFishIndex = Math.max(0, fishes.length - 1);
+      }
+    }
+  });
+  cancelBtn?.addEventListener('click', closeSettings);
+  // 点遮罩 = 取消
+  backdrop?.addEventListener('click', closeSettings);
+})();
+
+
 // ---- PWA（可选特性）：注册 Service Worker，首次在线缓存资源，之后离线运行 ----
 if (FEATURES.pwa && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => { });
@@ -593,6 +764,9 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(timer.getDelta(), 0.05);
   const t = timer.getElapsed();
   globalT = t;
+
+  // ---- 敲缸冲击波纹动画（不随 paused 停止，保证视觉反馈能消退）----
+  if (updateRipples) updateRipples(dt);
 
   // ---- 数字时钟（可选特性）：秒数变化时重绘 ----
   if (FEATURES.clock) {

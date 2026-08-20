@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FEATURES, PARAMS, WORLD } from './config.js';
+import { BASE_SIZE, FEATURES, PARAMS, WORLD } from './config.js';
 
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
@@ -32,6 +32,14 @@ let chasePair = null;    // { chaser, fleer, t } 正在追逐的一对鱼
 let chaseTimer = 8;      // 距离下次触发追逐的倒计时
 let formationPhase = 0;  // 队形相位（周期性变化 → 队形变换）
 let formationTimer = 18; // 距离下次队形变换的倒计时
+
+// 重建鱼群后重置群游共享状态，避免残留引用旧鱼对象
+export function resetShoalState() {
+  chasePair = null;
+  chaseTimer = 8;
+  formationPhase = 0;
+  formationTimer = 18;
+}
 
 /**
  * 鱼身轮廓半径（t: 0=头 … 1=尾），分段线性插值出流线型
@@ -91,6 +99,7 @@ export function createFish({ color, size = 1, speed = 1, bounds, modelGeo = null
 
   const ud = {
     bounds,
+    size,             // 体型基准（相对大小，用于按个体缩放距离类参数）
     speed,
     cruise: speed, // 当前巡航速度（速率匹配用）
     radius: 0.45 * size, // 碰撞半径（仍按头部球处理）
@@ -109,6 +118,12 @@ export function createFish({ color, size = 1, speed = 1, bounds, modelGeo = null
     lastDir: new THREE.Vector3(0, 0, 1), // 上一帧速度方向（用于计算转向强度）
     avoidYaw: 0, // 视觉回避目标偏转角（低通平滑，防止边界前朝向抖动/旋转）
     swayPhase: Math.random() * Math.PI * 2, // 摆尾相位（相位积分，避免时变频率的抖动尖峰）
+    startleTriggerTime: -1, // 受惊触发时刻（含延迟，全局秒）
+    startleUntil: -9,       // 受惊结束时刻（含延迟+持续期）
+    startleType: 0,         // 受惊分型：0 基础 / 1 慌乱 / 2 下潜
+    startleEscapeYaw: 0,    // 逃逸目标世界 yaw（rad）
+    startleNextTurn: -1,    // 慌乱型下次重采样方向时刻
+    startleActivated: false,// 是否已施加冲量
     index: -1, // 调试编号
     prevYawTarget: 0, // 上一帧目标偏转角（跳变检测）
     prevAvoidYaw: 0, // 上一帧平滑偏转角（跳变检测）
@@ -385,12 +400,21 @@ export function updateFish(fish, time, dt, fishes) {
   // 每帧读取可调参数（实时参数面板修改即时生效）
   const {
     W_SEP, W_ALIGN, W_COH, WANDER, CRUISE_KEEP,
-    PERCEPTION, NEAREST_N, SEPARATION_R, MAX_STEER,
+    NEAREST_N, MAX_STEER,
     RATE_MATCH, RATE_BIAS,
-    BOUNDARY_MARGIN, BOUNDARY_FORCE, VISUAL_SIGHT, VISUAL_GAIN,
+    BOUNDARY_MARGIN, BOUNDARY_FORCE, VISUAL_GAIN,
     FOLLOW_RATE, SWAY_FREQ, MAX_SWAY_FREQ, SWAY_AMP, TAIL_AMP,
     CHASE_STR, CHASE_SPEED, FLED_SPEED, SCATTER_R, SCATTER_FORCE, FORMATION_STR,
+    STARTLE_TIME, STARTLE_SPEED, STARTLE_SWAY_FREQ, STARTLE_TURN, STARTLE_DELAY_R, STARTLE_JITTER,
+    PANIC_RATIO, PANIC_JITTER, PANIC_SPEED_MULT, DIVE_RATIO, DIVE_VEL, SCATTER_SEP_BOOST,
   } = PARAMS;
+  // 按个体体型缩放距离类参数：大/小鱼视野、分离半径、视觉回避、食物感知按 ud.size/BASE_SIZE 比例缩放，
+  // 使大小混合时行为协调（大看远、小看近）；统一 size=BASE_SIZE 时缩放因子为 1，不影响原始标定手感。
+  const SZ = ud.size / BASE_SIZE;
+  const PERCEPTION = PARAMS.PERCEPTION * SZ;
+  const SEPARATION_R = PARAMS.SEPARATION_R * SZ;
+  const VISUAL_SIGHT = PARAMS.VISUAL_SIGHT * SZ;
+  const FOOD_SIGHT = PARAMS.FOOD_SIGHT * SZ;
   const FOV_COS = Math.cos(PARAMS.FOV_DEG / 2 * Math.PI / 180);
   const MAX_PITCH = PARAMS.MAX_PITCH_DEG * Math.PI / 180;
   const MAX_BEND = PARAMS.MAX_BEND_DEG * Math.PI / 180;
@@ -448,7 +472,12 @@ export function updateFish(fish, time, dt, fishes) {
       count++;
       // 分离：越近越强（线性衰减），方向远离邻居（nb.dir 指向邻居，故取反）
       if (nb.d < SEPARATION_R) {
-        tmpSep.addScaledVector(nb.dir, -(1 - nb.d / SEPARATION_R));
+        // 受惊鱼对间分离增强（慌乱感的群体二次扰动）；fancy 关闭时不做
+        const otherUd = nb.other.userData;
+        const sepBoost = (FEATURES.scatterPanicFancy
+          && ud.startleUntil > time && otherUd.startleUntil > time)
+          ? SCATTER_SEP_BOOST : 1.0;
+        tmpSep.addScaledVector(nb.dir, -(1 - nb.d / SEPARATION_R) * sepBoost);
       }
       // 对齐
       tmpAlign.add(nb.other.userData.vel);
@@ -473,12 +502,16 @@ export function updateFish(fish, time, dt, fishes) {
   if (count > 0) {
     const groupScale = 1 - 0.95 * avoid;
 
-    // 分离：保留距离衰减强度（上限 1），不抹平
+    // 受惊期弱化凝聚/对齐：突出"夺路而逃"的各自逃命感，仅保留分离防撞。
+    // 系数 0.2 保留少量残量避免鱼群完全脱节
+    const alignCohScale = (ud.startleUntil > time && ud.startleActivated) ? 0.2 : 1.0;
+
+    // 分离：保留距离衰减强度（上限 1），不抹平；受惊对间另由 SCATTER_SEP_BOOST 放大
     const sepLen = tmpSep.length();
     if (sepLen > 1) tmpSep.multiplyScalar(1 / sepLen);
     tmpSep.multiplyScalar(W_SEP * groupScale);
-    tmpAlign.normalize().multiplyScalar(W_ALIGN * groupScale);
-    tmpCoh.divideScalar(count).sub(pos).normalize().multiplyScalar(W_COH * groupScale);
+    tmpAlign.normalize().multiplyScalar(W_ALIGN * groupScale * alignCohScale);
+    tmpCoh.divideScalar(count).sub(pos).normalize().multiplyScalar(W_COH * groupScale * alignCohScale);
     tmpAcc.add(tmpSep).add(tmpAlign).add(tmpCoh);
 
     // 速率匹配：巡航速度向邻居平均速率靠拢，同时受自身偏好约束
@@ -520,6 +553,18 @@ export function updateFish(fish, time, dt, fishes) {
     }
   }
 
+  // 受惊期增速覆盖：既提局部 cruiseTarget 供巡航保持，也提 ud.cruise 本体，
+  // 否则积分后 vel 会被 ud.cruise 钳回原速（见下方 vel.multiplyScalar），速度与摆尾幅度都上不去
+  if (ud.startleUntil > time && ud.startleActivated) {
+    const mult = ud.startleType === 1 ? STARTLE_SPEED * PANIC_SPEED_MULT : STARTLE_SPEED;
+    const startleCruise = ud.speed * mult;
+    ud.cruise += (startleCruise - ud.cruise) * (1 - Math.pow(1 - 0.9, dt * 60));
+    cruiseTarget = ud.cruise;
+  } else if (ud.cruise > ud.speed * 1.15) {
+    // 受惊结束后回落：无邻居时不受速率匹配约束，手动渐回自身偏好速率
+    ud.cruise += (ud.speed - ud.cruise) * (1 - Math.pow(1 - 0.5, dt * 60));
+  }
+
   // ---- 巡航保持：把速度拉回巡航速度 ----
   // 防止单条鱼（无群游力）或边界转向时减速到静止，导致 head 朝向失稳原地打转
   const keep = 1 - Math.pow(1 - CRUISE_KEEP, dt * 60);
@@ -536,8 +581,24 @@ export function updateFish(fish, time, dt, fishes) {
   // ---- 视觉回避：探测缸壁得到目标偏转角，低通平滑后缓慢施加 ----
   // 平滑防止射线命中状态逐帧跳变导致朝向抖动/旋转
   const debugRays = DEBUG_AVOID ? [] : null;
-  const yawTarget = visualAvoid(pos, tmpForward, b, debugRays);
-  ud.avoidYaw += (yawTarget - ud.avoidYaw) * (1 - Math.pow(1 - 0.5, dt * 60));
+  const yawTarget = visualAvoid(pos, tmpForward, b, VISUAL_SIGHT, debugRays);
+
+  // 受惊朝向覆盖：追踪逃逸方向，慌乱型周期性重采样（时变 → 慌乱感）
+  let startleYaw = yawTarget;
+  if (FEATURES.scatterPanic && ud.startleUntil > time && ud.startleActivated) {
+    if (ud.startleType === 1 && time >= ud.startleNextTurn) {
+      tmpV.subVectors(pos, WORLD.scatterSource).normalize();
+      const radialYaw = Math.atan2(tmpV.x, tmpV.z);
+      ud.startleEscapeYaw = radialYaw + (Math.random() - 0.5) * 2 * PANIC_JITTER;
+      ud.startleNextTurn = time + 0.12 + Math.random() * 0.18;
+    }
+    const fwdYaw = Math.atan2(tmpForward.x, tmpForward.z);
+    let dy = ud.startleEscapeYaw - fwdYaw;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    startleYaw = dy * 0.7 + yawTarget * 0.3; // 受惊主导，保留 30% visualAvoid 防撞缸
+  }
+  ud.avoidYaw += (startleYaw - ud.avoidYaw) * (1 - Math.pow(1 - 0.5, dt * 60));
   if (DEBUG_AVOID) {
     // 偏转角跳变检测：目标或平滑值突变时打印该帧完整上下文
     const dT = yawTarget - ud.prevYawTarget;
@@ -559,7 +620,9 @@ export function updateFish(fish, time, dt, fishes) {
     ud.prevAvoidYaw = ud.avoidYaw;
   }
   if (Math.abs(ud.avoidYaw) > 1e-4) {
-    const maxTurn = 0.4; // 单帧最大偏转角（rad ≈ 23°），防止过冲/反转
+    // 受惊期单帧最大偏转角放大（更急转向，慌乱感）
+    const maxTurn = (FEATURES.scatterPanic && ud.startleUntil > time && ud.startleActivated)
+      ? 0.4 * STARTLE_TURN : 0.4;
     const turn = THREE.MathUtils.clamp(ud.avoidYaw, -maxTurn, maxTurn);
     tmpV.copy(tmpForward).applyAxisAngle(tmpUp.set(0, 1, 0), turn);
     tmpV.sub(tmpForward).multiplyScalar(VISUAL_GAIN);
@@ -574,7 +637,7 @@ export function updateFish(fish, time, dt, fishes) {
       const d = tmpV.length();
       if (d < bestD) { bestD = d; best = food; }
     }
-    if (best && bestD < PARAMS.FOOD_SIGHT) {
+    if (best && bestD < FOOD_SIGHT) {
       tmpV.subVectors(best.pos, pos);
       if (bestD > 0.2) {
         tmpV.normalize().multiplyScalar(PARAMS.FOOD_ATTRACT);
@@ -607,13 +670,36 @@ export function updateFish(fish, time, dt, fishes) {
     }
   }
 
-  // ---- 惊散反应（可选特性）：鱼食落水/干扰源附近的鱼群瞬间散开再聚拢 ----
-  if (FEATURES.fishPlay && !ud.isPredator && WORLD.scatterSource && time < WORLD.scatterUntil) {
-    tmpV.subVectors(pos, WORLD.scatterSource);
-    const d = tmpV.length();
-    if (d < SCATTER_R && d > 1e-6) {
-      tmpV.normalize().multiplyScalar(SCATTER_FORCE * (1 - d / SCATTER_R));
-      tmpAcc.add(tmpV);
+  // ---- 惊散反应（可选特性）：冲量 + 逃逸朝向 + 增速，由动力学自然过渡 ----
+  if (FEATURES.scatterPanic && !ud.isPredator && WORLD.scatterSource && time < WORLD.scatterUntil) {
+    // 首次进入受惊：按距离设置反应延迟、分型、逃逸方向
+    if (ud.startleUntil < time) {
+      tmpV.subVectors(pos, WORLD.scatterSource);
+      const d = tmpV.length();
+      if (d < SCATTER_R && d > 1e-6) {
+        const delay = (d / SCATTER_R) * STARTLE_DELAY_R + Math.random() * 0.05;
+        ud.startleTriggerTime = time + delay;
+        ud.startleUntil = ud.startleTriggerTime + STARTLE_TIME;
+        ud.startleActivated = false;
+        const r = Math.random();
+        // fancy 关闭：不分型（慌乱/下潜），全部按基础型 0，逃逸方向也更规整
+        ud.startleType = FEATURES.scatterPanicFancy
+          ? (r < PANIC_RATIO ? 1 : (r < PANIC_RATIO + DIVE_RATIO ? 2 : 0))
+          : 0;
+        tmpV.normalize();
+        const jitter = (ud.startleType === 1 ? PANIC_JITTER : STARTLE_JITTER)
+          * (Math.random() - 0.5) * 2;
+        ud.startleEscapeYaw = Math.atan2(tmpV.x, tmpV.z) + jitter;
+        ud.startleNextTurn = ud.startleTriggerTime + 0.12 + Math.random() * 0.18;
+      }
+    }
+    // 到达触发时刻：一次性施加速度冲量（之后由限速/速率匹配自然衰减）
+    if (!ud.startleActivated && ud.startleTriggerTime > 0
+      && time >= ud.startleTriggerTime) {
+      ud.startleActivated = true;
+      tmpV.subVectors(pos, WORLD.scatterSource).normalize();
+      vel.addScaledVector(tmpV, SCATTER_FORCE);
+      if (ud.startleType === 2) vel.y -= DIVE_VEL; // 急转下潜型
     }
   }
 
@@ -672,10 +758,14 @@ export function updateFish(fish, time, dt, fishes) {
   const k = 1 - Math.pow(1 - FOLLOW_RATE, dt * 60);
 
   // 摆尾频率随游速：游得越快摆得越快（真实鱼 Strouhal 数稳定），发力时频率略升；
-  // 上限钳制防止高速（被鱼群带快）时高频"颤抖"
+  // 上限钳制防止高速（被鱼群带快）时高频"颤抖"。
+  // 受惊期临时放大上限，让惊吓鱼快速甩尾（慌乱感），不影响正常状态
+  const freqCap = (ud.startleUntil > time && ud.startleActivated)
+    ? MAX_SWAY_FREQ * STARTLE_SWAY_FREQ
+    : MAX_SWAY_FREQ;
   const freq = Math.min(
     SWAY_FREQ * (vel.length() / ud.speed) * (1 + 0.35 * ud.effort),
-    MAX_SWAY_FREQ
+    freqCap
   );
   // 摆尾相位积分：phase += freq*dt（模 2π 防精度漂移）。
   // 若直接用 sin(time*freq)，频率变化时瞬时频率 = freq + time*dfreq/dt，
@@ -852,7 +942,7 @@ function rayAABB(origin, dir, bounds) {
 // 命中边界时生成目标偏转 yaw（rad）：右侧命中→左转（负）、左侧命中→右转（正）、
 // 正前方命中→偏向空间更大一侧；命中越近 yaw 越大。
 // 只返回目标偏转角，由调用方平滑后施加，避免射线命中状态跳变导致朝向抖动
-function visualAvoid(pos, fwd, bounds, outRays) {
+function visualAvoid(pos, fwd, bounds, sight, outRays) {
   let yaw = 0;
   let leftS = 0, rightS = 0, frontS = 0;
   for (const deg of VISUAL_RAYS) {
@@ -860,8 +950,8 @@ function visualAvoid(pos, fwd, bounds, outRays) {
     // 采样射线方向：前方向绕竖直轴偏转 deg
     tmpV.copy(fwd).applyAxisAngle(tmpUp.set(0, 1, 0), rad);
     const t = rayAABB(pos, tmpV, bounds);
-    if (t === null || t > PARAMS.VISUAL_SIGHT) continue;
-    const s = 1 - t / PARAMS.VISUAL_SIGHT; // 0~1 越近越强
+    if (t === null || t > sight) continue;
+    const s = 1 - t / sight; // 0~1 越近越强
     if (outRays) outRays.push({ deg, t: +t.toFixed(2), s: +s.toFixed(2) });
     if (deg < 0) leftS = Math.max(leftS, s);
     else if (deg > 0) rightS = Math.max(rightS, s);

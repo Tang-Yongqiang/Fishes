@@ -11,7 +11,7 @@ const _isMobile = (typeof window !== 'undefined') && (
 );
 
 export const FEATURES = {
-  feeding: !_isMobile,  // 点击喂食：移动端无此交互，关闭省资源
+  feeding: true,  // 点击交互（水面聚鱼/缸壁惊散撒食）：桌面鼠标 + 移动端触屏均开启
   // 气泡：移动端关闭（小屏幕存在感极低，省 40 粒子的每帧 sin 计算 + DrawCall）
   bubbles: !_isMobile,
   decor: true,          // 水草/装饰：静态，开销极小，保留视觉层次
@@ -24,10 +24,30 @@ export const FEATURES = {
   pwa: true,            // PWA：离线缓存
   // 鱼群嬉戏追逐：移动端关闭，省追逐对调度 + 全局队形相位等额外逻辑
   fishPlay: !_isMobile,
+  // 惊散反应（敲缸/扰动的散开+加速+朝向变化）：全端开启，与桌面一致
+  scatterPanic: true,
+  // 惊散慌乱分型（分型 / 方向时变 / 群体二次扰动）：全端开启；
+  // 关闭则退化为"基础散开"（仍加速变向但无慌乱变向/下潜/分离放大），便于降功耗或简化表现
+  scatterPanicFancy: true,
   // 缸底小虾爬动+扬沙：移动端小屏幕几乎注意不到，关闭省 ~8% CPU
   creatures: !_isMobile,
   uiToggle: true,       // UI 一键隐藏：移动端核心功能，保留
 };
+
+export const SETTINGS = {
+  // 鱼群数量：桌面默认 60 条；移动端走原有分级逻辑（数量分级、size 1.9）
+  fishCount: _isMobile ? (window.innerWidth < 400 ? 28 : 42) : 60,
+  // 鱼体型（相对大小，1.0=原始标定尺寸）。移动端默认 1.9（配合小屏幕更醒目）
+  fishSize: _isMobile ? 1.9 : 1.0,
+  // 是否启用随机大小：true 时每条鱼在 [sizeMin, sizeMax] 内随机取，false 时统一 fishSize
+  randomSize: false,
+  sizeMin: 0.7,  // 随机范围下限（relative）
+  sizeMax: 1.4,  // 随机范围上限（relative）
+};
+
+// 体型缩放的距离参数基准：取"平台统一大小"，保证统一尺寸时缩放因子=1、不破坏现有手感，
+// 仅在有大小差异（随机）时才按个体 size 相对基准缩放距离类参数。
+export const BASE_SIZE = _isMobile ? 1.9 : 1.0;
 
 export const PARAMS = {
   // ---- Boids 群游 ----
@@ -73,9 +93,22 @@ export const PARAMS = {
   CHASE_SPEED: 1.55,    // 追逐时巡航速度倍率（追者）
   FLED_SPEED: 1.3,      // 追逐时巡航速度倍率（逃者）
   CHASE_DURATION: 5,    // 单次追逐持续时间（秒）
-  SCATTER_R: 7.0,       // 惊散半径（鱼食落水/干扰）
-  SCATTER_FORCE: 5.5,   // 惊散力
-  SCATTER_TIME: 0.7,    // 惊散持续时间（秒）
+  SCATTER_R: 16,        // 惊散半径（点击缸壁/水面扰动覆盖范围，缸大故放大）
+  SCATTER_FORCE: 12,    // 惊散力（敲缸惊吓的瞬时推离强度，绕开转向限幅后需较大）
+  SCATTER_TIME: 1.0,    // 惊散持续时间（秒）
+  // ---- 受惊分型（scatterPanic 开启时生效）----
+  STARTLE_TIME: 1.4,    // 个体受惊持续（秒，含延迟后）
+  STARTLE_SPEED: 3.0,   // 受惊期巡航倍率（基础型）
+  STARTLE_SWAY_FREQ: 1.9, // 受惊期摆尾频率上限倍率（快甩尾，营造慌乱感）
+  STARTLE_TURN: 1.6,    // 受惊期单帧最大偏转角放大倍率
+  STARTLE_DELAY_R: 0.15, // 距离→延迟系数（声波传播感）
+  STARTLE_JITTER: 0.45, // 基础型逃逸方向抖动（rad，约 ±25°）
+  PANIC_RATIO: 0.20,    // 慌乱分型占比（20%）
+  PANIC_JITTER: 0.70,  // 慌乱型抖动（rad，约 ±40°）
+  PANIC_SPEED_MULT: 1.3, // 慌乱型额外加速倍率
+  DIVE_RATIO: 0.10,    // 下潜分型占比（10%）
+  DIVE_VEL: 4.0,       // 下潜型初始 y 负冲量
+  SCATTER_SEP_BOOST: 1.5, // 受惊鱼对间分离增强倍率
   FORMATION_STR: 0.8,   // 队形变换强度
 };
 

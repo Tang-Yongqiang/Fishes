@@ -105,6 +105,22 @@
       margin-bottom: 4px;
     }
 
+    #panel .preset-btn {
+      width: 100%;
+      margin-top: 6px;
+      padding: 4px 0;
+      border-radius: 6px;
+      border: 1px solid rgba(159, 232, 255, 0.4);
+      background: rgba(4, 14, 24, 0.5);
+      color: #9fe8ff;
+      font: 12px "Microsoft YaHei", system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    #panel .preset-btn:hover {
+      background: rgba(159, 232, 255, 0.15);
+    }
+
     #panel .prow {
       display: flex;
       align-items: center;
@@ -179,24 +195,228 @@
     }
 
     #rotate-hint button {
-      margin-top: 8px; padding: 8px 22px; border-radius: 20px;
-      border: 1px solid rgba(159, 232, 255, 0.5); color: #9fe8ff;
-      background: rgba(159, 232, 255, 0.08); font: 14px "Microsoft YaHei", system-ui, sans-serif;
+      margin-top: 8px;
+      padding: 8px 22px;
+      border-radius: 20px;
+      border: 1px solid rgba(159, 232, 255, 0.5);
+      color: #9fe8ff;
+      background: rgba(159, 232, 255, 0.08);
+      font: 14px "Microsoft YaHei", system-ui, sans-serif;
     }
+
     /* UI 一键隐藏（可选特性）：body.ui-hidden 时隐藏全部界面层，只留鱼缸 */
     body.ui-hidden #hud,
     body.ui-hidden #hint,
     body.ui-hidden #panel,
-    body.ui-hidden #rotate-hint { display: none; }
-    /* 虚拟按钮：仅移动端显示，点击切换 UI 显隐 */
-    #ui-toggle-btn {
-      position: fixed; right: 14px; bottom: 14px; z-index: 60;
-      padding: 8px 14px; border-radius: 16px;
-      border: 1px solid rgba(159, 232, 255, 0.4); color: #9fe8ff;
-      background: rgba(4, 14, 24, 0.5);
-      font: 13px "Microsoft YaHei", system-ui, sans-serif; display: none;
+    body.ui-hidden #rotate-hint {
+      display: none;
     }
-    body.mobile #ui-toggle-btn { display: block; }
+
+    /* UI 隐藏按钮：点击切换 UI 显隐 */
+    #ui-toggle-btn {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 60;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid rgba(159, 232, 255, 0.4);
+      color: #9fe8ff;
+      background: rgba(4, 14, 24, 0.5);
+      font: bold 16px "Microsoft YaHei", system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    /* 设置齿轮按钮：全端显示，点击弹出设置面板 */
+    #settings-btn {
+      position: fixed;
+      right: 58px;
+      bottom: 14px;
+      z-index: 60;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid rgba(159, 232, 255, 0.4);
+      background: rgba(4, 14, 24, 0.5);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    #settings-btn .gear {
+      display: block;
+    }
+
+    /* 设置面板 modal */
+    #settings-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+    }
+
+    #settings-modal.hidden {
+      display: none;
+    }
+
+    .settings-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(4, 12, 20, 0.6);
+      backdrop-filter: blur(2px);
+    }
+
+    .settings-card {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(320px, calc(100vw - 32px));
+      background: rgba(8, 20, 32, 0.92);
+      border: 1px solid rgba(120, 190, 230, 0.3);
+      border-radius: 14px;
+      padding: 16px 18px;
+      color: #cfe6f2;
+      font: 13px/1.6 "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    .settings-title {
+      font-weight: 600;
+      color: #9fe8ff;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .settings-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+    }
+
+    .settings-row-name {
+      color: #e6f4fb;
+      font-weight: 500;
+    }
+
+    .settings-row-desc {
+      color: #7fa8c0;
+      font-size: 11px;
+    }
+
+    .settings-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .settings-btn {
+      padding: 7px 18px;
+      border-radius: 14px;
+      cursor: pointer;
+      border: 1px solid rgba(159, 232, 255, 0.4);
+      color: #9fe8ff;
+      background: rgba(159, 232, 255, 0.06);
+      font: 13px "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    .settings-btn.primary {
+      background: rgba(79, 195, 247, 0.22);
+      color: #d8f4ff;
+    }
+
+    /* 设置面板内的滑块（排除 switch 内的隐藏 input） */
+    .settings-row input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      flex-shrink: 0;
+      width: 110px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(127, 168, 192, 0.35);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .settings-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #9fe8ff;
+      border: none;
+    }
+
+    .settings-row input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #9fe8ff;
+      border: none;
+    }
+
+    /* 开关 switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: rgba(127, 168, 192, 0.35);
+      border-radius: 26px;
+      transition: .2s;
+    }
+
+    .switch-slider::before {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      background: #cfe6f2;
+      border-radius: 50%;
+      transition: .2s;
+    }
+
+    .switch input:checked+.switch-slider {
+      background: #4fc3f7;
+    }
+
+    .switch input:checked+.switch-slider::before {
+      transform: translateX(20px);
+    }
+
+    body.ui-hidden #settings-btn {
+      display: none;
+    }
 
     @keyframes rotate-pulse {
 
@@ -227,9 +447,17 @@
     }
 
     @keyframes fade-enter {
-      0%   { opacity: 1; }
-      70%  { opacity: 1; }
-      100% { opacity: 0; }
+      0% {
+        opacity: 1;
+      }
+
+      70% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+      }
     }
   </style>
 </head>
@@ -247,6 +475,81 @@
   </div>
   <div id="hint">右键旋转 · 中键平移 · 滚轮缩放 · WASD 移动 · 空格 暂停 · F 追尾视角 · Tab 切换鱼 · 点击撒食 · P 截图 · H 隐藏UI</div>
   <button id="ui-toggle-btn">UI</button>
+  <!-- 设置齿轮按钮：点击弹出设置面板 -->
+  <button id="settings-btn" aria-label="设置">
+    <svg class="gear" viewBox="0 0 24 24" width="29" height="27" fill="#9fe8ff" xmlns="http://www.w3.org/2000/svg">
+      <!-- 8 个齿轮齿（绕中心 45° 间隔） -->
+      <g>
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(0 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(45 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(90 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(135 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(180 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(225 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(270 12 12)" />
+        <rect x="9.9" y="0.6" width="4.2" height="3.9" rx="0.7" transform="rotate(315 12 12)" />
+      </g>
+      <!-- 主体圆环（外径 9.2、内孔 3.5，evenodd 挖孔不依赖背景色） -->
+      <path fill-rule="evenodd"
+        d="M12 2.8 a9.2 9.2 0 1 0 0 18.4 a9.2 9.2 0 1 0 0 -18.4 Z M12 8.5 a3.5 3.5 0 1 1 0 7 a3.5 3.5 0 1 1 0 -7 Z" />
+    </svg>
+  </button>
+  <!-- 设置面板（modal）：开关/参数点击"确定"才生效 -->
+  <div id="settings-modal" class="hidden">
+    <div class="settings-backdrop"></div>
+    <div class="settings-card">
+      <div class="settings-title">设置</div>
+      <div class="settings-body">
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-name">惊散反应</div>
+            <div class="settings-row-desc">点击缸壁/水面时，附近鱼群惊慌散开</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="setting-scatter">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-name">鱼数量</div>
+            <div class="settings-row-desc">当前 <span id="setting-count-val">60</span> 条</div>
+          </div>
+          <input type="range" id="setting-count" min="5" max="120" step="5">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-name">鱼大小（固定）</div>
+            <div class="settings-row-desc">值 <span id="setting-size-val">1.0</span></div>
+          </div>
+          <input type="range" id="setting-size" min="0.5" max="2.0" step="0.1">
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-name">随机大小</div>
+            <div class="settings-row-desc">每条鱼在范围内随机取</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="setting-randomsize">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+        <div class="settings-row" id="setting-size-range" style="display:none">
+          <div class="settings-row-text">
+            <div class="settings-row-name">大小范围</div>
+            <div class="settings-row-desc">min <span id="setting-size-min-val">0.7</span> · max <span
+                id="setting-size-max-val">1.4</span></div>
+          </div>
+          <input type="range" id="setting-size-min" style="width:64px" min="0.3" max="2.0" step="0.05">
+          <input type="range" id="setting-size-max" style="width:64px" min="0.3" max="2.0" step="0.05">
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button id="settings-cancel" class="settings-btn">取消</button>
+        <button id="settings-ok" class="settings-btn primary">确定</button>
+      </div>
+    </div>
+  </div>
   <div id="rotate-hint">
     <div class="icon">↻</div>
     <div>建议横屏观看</div>
