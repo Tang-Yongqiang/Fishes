@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FEATURES } from './config.js';
+import { FEATURES } from './scenes/fish-tank/config.js';
 
 // ---- 微小生物（可选特性）：缸底小虾爬行 + 爬行时扬起细沙 ----
 

@@ -1,44 +1,33 @@
-/**
- * 全局配置：特性开关 + 可调参数 + 共享世界状态。
- * - FEATURES：每个功能可用 true/false 开关，false 则该功能完全不初始化/执行，
- *   保证最小系统（鱼群游动）不受任何影响。
- * - PARAMS：可调参数，实时参数面板直接修改，引擎每帧读取，无需重启。
- * - WORLD：各功能共享的运行时状态（食物、掠食者、障碍物等）。
- */
-// 移动端检测（与 main.js 保持一致，避免 Capacitor WebView UA 差异）
-const _isMobile = (typeof window !== 'undefined') && (
-  !!window.Capacitor || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator?.userAgent || '')
-);
+// 鱼缸场景配置（scenes/fish-tank）：本场景专属的全局状态。
+// - FEATURES：本场景每个功能可用 true/false 开关，false 则该功能完全不初始化/执行，
+//   保证最小系统（鱼群游动）不受任何影响。
+// - PARAMS：可调参数，实时参数面板直接修改，引擎每帧读取，无需重启。
+// - SETTINGS：用户可经设置弹窗调整的偏好（数量/大小）。
+// - WORLD：本场景各功能共享的运行时状态（食物、掠食者、障碍物等）。
+// 通用应用级开关（时钟/PWA/截图/UI切换/移动端检测）见 src/core/config.js。
+import { isMobile } from '../../core/config.js';
 
 export const FEATURES = {
   feeding: true,  // 点击交互（水面聚鱼/缸壁惊散撒食）：桌面鼠标 + 移动端触屏均开启
   // 气泡：移动端关闭（小屏幕存在感极低，省 40 粒子的每帧 sin 计算 + DrawCall）
-  bubbles: !_isMobile,
+  bubbles: !isMobile,
   decor: true,          // 水草/装饰：静态，开销极小，保留视觉层次
-  caustics: !_isMobile, // 水面光斑：移动端已在 main.js 关，这里同步开关声明
+  caustics: !isMobile, // 水面光斑：移动端已在 scene 关，这里同步开关声明
   predator: false,       // 掠食者：暂关闭
-  panel: true,          // 实时参数面板（仅桌面，main.js 已按 isMobile 屏蔽 DOM）
-  screenshot: true,     // 截图导出（仅桌面）
-  clock: true,          // 数字时钟：时钟生态缸核心，必须保留
-  clockFace: 'fixed',   // 时钟朝向
-  pwa: true,            // PWA：离线缓存
-  // 鱼群嬉戏追逐：移动端关闭，省追逐对调度 + 全局队形相位等额外逻辑
-  fishPlay: !_isMobile,
-  // 惊散反应（敲缸/扰动的散开+加速+朝向变化）：全端开启，与桌面一致
-  scatterPanic: true,
+  panel: true,          // 实时参数面板（仅桌面，scene 已按 isMobile 屏蔽 DOM）
+  fishPlay: !isMobile,  // 鱼群嬉戏追逐：移动端关闭，省追逐对调度 + 全局队形相位等额外逻辑
+  scatterPanic: true,   // 惊散反应（敲缸/扰动的散开+加速+朝向变化）：全端开启
   // 惊散慌乱分型（分型 / 方向时变 / 群体二次扰动）：全端开启；
   // 关闭则退化为"基础散开"（仍加速变向但无慌乱变向/下潜/分离放大），便于降功耗或简化表现
   scatterPanicFancy: true,
-  // 缸底小虾爬动+扬沙：移动端小屏幕几乎注意不到，关闭省 ~8% CPU
-  creatures: !_isMobile,
-  uiToggle: true,       // UI 一键隐藏：移动端核心功能，保留
+  creatures: !isMobile, // 缸底小虾爬动+扬沙：移动端小屏幕几乎注意不到，关闭省 ~8% CPU
 };
 
 export const SETTINGS = {
   // 鱼群数量：桌面默认 60 条；移动端走原有分级逻辑（数量分级、size 1.9）
-  fishCount: _isMobile ? (window.innerWidth < 400 ? 28 : 42) : 60,
+  fishCount: isMobile ? (window.innerWidth < 400 ? 28 : 42) : 60,
   // 鱼体型（相对大小，1.0=原始标定尺寸）。移动端默认 1.9（配合小屏幕更醒目）
-  fishSize: _isMobile ? 1.9 : 1.0,
+  fishSize: isMobile ? 1.9 : 1.0,
   // 是否启用随机大小：true 时每条鱼在 [sizeMin, sizeMax] 内随机取，false 时统一 fishSize
   randomSize: false,
   sizeMin: 0.7,  // 随机范围下限（relative）
@@ -47,7 +36,7 @@ export const SETTINGS = {
 
 // 体型缩放的距离参数基准：取"平台统一大小"，保证统一尺寸时缩放因子=1、不破坏现有手感，
 // 仅在有大小差异（随机）时才按个体 size 相对基准缩放距离类参数。
-export const BASE_SIZE = _isMobile ? 1.9 : 1.0;
+export const BASE_SIZE = isMobile ? 1.9 : 1.0;
 
 export const PARAMS = {
   // ---- Boids 群游 ----

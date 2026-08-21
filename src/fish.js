@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BASE_SIZE, FEATURES, PARAMS, WORLD } from './config.js';
+import { BASE_SIZE, FEATURES, PARAMS, WORLD } from './scenes/fish-tank/config.js';
 
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();

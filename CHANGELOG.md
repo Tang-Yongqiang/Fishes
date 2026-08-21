@@ -9,6 +9,22 @@
 
 ---
 
+## v0.3.0
+
+### Added
+
+- **应用骨架分层（core/scene 架构）**（[src/core/](file:///d:/Workspaces/Trae_workspace/Fishes/src/core)、[src/scenes/](file:///d:/Workspaces/Trae_workspace/Fishes/src/scenes)）：把原来职责混杂的单文件 `main.js` 拆分为可插拔的多场景架构，为未来扩展更多生态时钟场景（动物园、蚁穴等）打基础。
+  - `core/`（通用框架，跨场景共享）：[app.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/core/app.js)（环境检测/渲染器/场景/相机/控制/主循环/通用HUD/截图/PWA/UI隐藏/壁纸）+ [renderer.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/core/renderer.js)（WebGPU→WebGL2 回退）+ [clock.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/core/clock.js)（通用数字时钟）+ [config.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/core/config.js)（通用 `APP_FEATURES`/`isMobile`）。
+  - `scenes/fish-tank/`（鱼缸场景）：[scene.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/scenes/fish-tank/scene.js) 承载全部鱼缸逻辑，导出 `createFishTankScene(ctx)`。
+- **`?scene=` 多场景入口**（[src/main.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/main.js)）：`main.js` 改为薄入口，按 `?scene=fish-tank` 加载场景模块；未来新增场景只需在注册表登记一行。
+- **config 按场景拆分**：鱼缸专属全局状态（`FEATURES/SETTINGS/BASE_SIZE/PARAMS/WORLD`）移入 [scenes/fish-tank/config.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/scenes/fish-tank/config.js)，通用应用级开关移入 [core/config.js](file:///d:/Workspaces/Trae_workspace/Fishes/src/core/config.js)；原根目录 `config.js` 删除。
+
+### Changed
+
+- **设置/UI 按钮移至右上角**（[index.html](file:///d:/Workspaces/Trae_workspace/Fishes/index.html)）：设置齿轮 + UI 隐藏按钮由右下角改到右上角，并置于实时参数面板上方（面板下移让位），布局自上而下：设置 → UI → 实时参数。
+
+---
+
 ## v0.2.0
 
 ### Added
