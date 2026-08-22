@@ -10,7 +10,7 @@
 - **名称**：3D 鱼缸数字时钟（three.js + Vite + Capacitor）。
 - **平台**：桌面 Web（master 分支）+ Android（Capacitor 打包）。
 - **核心**：数字时钟生态缸 —— 数字化显示时间 + 3D 鱼群游动。
-- **当前版本**：v0.2.0（见 `package.json`）。
+- **当前版本**：v0.3.0（见 `package.json`）。
 
 ## 技术栈
 
@@ -39,6 +39,7 @@
 
 ## 当前进度与待办
 
+- ✅ core/scene 多场景架构分层（v0.3.0）：`core/` 通用框架（渲染器/时钟/HUD）+ `scenes/` 场景化（fish-tank），`?scene=` 入口，config 按场景拆分（通用开关移入 `core/config.js`，鱼缸状态移入 `scenes/fish-tank/config.js`）。
 - ✅ 惊散动力学升级（冲量+朝向+增速+分型+boids 弱化+摆尾加速）落地，已装真机验证。
 - ✅ 移动端行为与桌面对齐（scatterPanic 全端开启）。
 - ✅ 重新生成完整 Android 原生工程，打通构建+装机流程。

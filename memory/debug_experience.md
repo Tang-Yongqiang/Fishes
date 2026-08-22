@@ -9,11 +9,11 @@
 
 ## 一、鱼群惊散反应（敲缸/干扰 → 鱼群惊慌散开）
 
-### 1. 功能与开关（src/config.js）
+### 1. 功能与开关（src/scenes/fish-tank/config.js）
 
 - `FEATURES.scatterPanic`：惊散总开关，全端 `true`。关闭则整段惊散逻辑短路。
 - `FEATURES.scatterPanicFancy`：慌乱分型子开关，全端 `true`。关闭则退化为"基础散开"（仍加速变向，但无分型/慌乱变向/下潜/群体分离放大）。
-- 触发入口：`main.js` 点击缸壁/水面时设 `WORLD.scatterSource` + `WORLD.scatterUntil`。
+- 触发入口：`scenes/fish-tank/scene.js` 点击缸壁/水面时设 `WORLD.scatterSource` + `WORLD.scatterUntil`。
 - 全链路由 `ud.startle*` 系列字段驱动，无模块级共享状态（除 WORLD.scatterSource）。
 
 ### 2. 动力学设计（关键思路）
@@ -31,7 +31,7 @@
 - **受惊期摆尾频率上限放大**：`freqCap = startle ? MAX_SWAY_FREQ*STARTLE_SWAY_FREQ : MAX_SWAY_FREQ`。
 - **个体延迟波纹**：`delay = (d/SCATTER_R)*STARTLE_DELAY_R + rand*0.05` → 近源先反应、远源后反应。
 
-### 3. 参数表（src/config.js STARTLE_* / PANIC_* / DIVE_*）
+### 3. 参数表（src/scenes/fish-tank/config.js STARTLE_* / PANIC_* / DIVE_*）
 
 | 参数 | 当前值 | 含义 |
 |---|---|---|
