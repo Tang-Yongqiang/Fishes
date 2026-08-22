@@ -21,6 +21,11 @@ export const FEATURES = {
   // 关闭则退化为"基础散开"（仍加速变向但无慌乱变向/下潜/分离放大），便于降功耗或简化表现
   scatterPanicFancy: true,
   creatures: !isMobile, // 缸底小虾爬动+扬沙：移动端小屏幕几乎注意不到，关闭省 ~8% CPU
+  plantCollide: true,   // 鱼↔草碰撞：植物挂球形碰撞体（基座+中上），鱼绕草丛游（全端）
+  plantImpulse: !isMobile, // 鱼↔草拨叶：鱼靠近时叶片摆动冲量（拨开又弹回）；移动端关省性能
+  panicRefuge: true,    // 鱼↔草惊散避难：受惊鱼逃向最近草/石，冲刺时碰撞让路（全端）
+  coverAttract: !isMobile, // 结构区偏好（D）：软吸引鱼群在草/石边沿逗留，中央更空旷（桌面）
+  plantNibble: !isMobile,  // 蹭叶轻啄（E）：鱼偶尔停草叶旁轻啄触发叶摆（桌面，10~25s 一次）
 };
 
 export const SETTINGS = {
@@ -32,6 +37,10 @@ export const SETTINGS = {
   randomSize: false,
   sizeMin: 0.7,  // 随机范围下限（relative）
   sizeMax: 1.4,  // 随机范围上限（relative）
+  // 装饰数量（上限 = 布局表条目数：水草桌面 27/移动 12，石头桌面 19/移动 12）：
+  // 可在设置弹窗"确定"后重建生效；均匀抽稀，数量减少时品种仍混合
+  plantCount: isMobile ? 12 : 27,  // GLB 水草株数
+  rockCount: isMobile ? 12 : 19,   // 真实石头块数
 };
 
 // 体型缩放的距离参数基准：取"平台统一大小"，保证统一尺寸时缩放因子=1、不破坏现有手感，
@@ -99,6 +108,12 @@ export const PARAMS = {
   DIVE_VEL: 4.0,       // 下潜型初始 y 负冲量
   SCATTER_SEP_BOOST: 1.5, // 受惊鱼对间分离增强倍率
   FORMATION_STR: 0.8,   // 队形变换强度
+  // ---- 鱼↔草互动 ----
+  REFUGE_RANGE: 26,     // 惊散避难搜索半径：该范围内找最近草/石当避难所
+  REFUGE_BIAS: 0.6,     // 逃逸方向混合权重：0.6 冲避难所 + 0.4 背离惊源
+  COVER_RANGE: 16,      // 结构区偏好（D）：软吸引作用距离
+  COVER_STR: 0.12,      // 结构区偏好强度（≤ wander≈0.3 的一半，不与 boids 抢权重）
+  NIBBLE_SIGHT: 9,      // 蹭叶轻啄（E）：找草的搜索半径
 };
 
 // 共享运行时状态（各功能写入/读取）
@@ -106,6 +121,8 @@ export const WORLD = {
   foods: [],           // 食物粒子 [{ pos, vy, t }]
   predator: null,      // 掠食者 { group, pos, vel, radius }
   obstacles: [],       // 装饰障碍 [{ pos, radius }]
+  rockSpheres: [],     // 石头叠层碰撞球（射线式前瞻回避用，与 obstacles 共享同一对象）
+  plantRefs: [],       // GLB 草株引用（蹭叶轻啄 E 用：每项为 holder，含 position/userData）
   scatterSource: null, // 惊散源位置（鱼食落水等触发）
   scatterUntil: -1,    // 惊散结束时间（全局时间秒）
 };

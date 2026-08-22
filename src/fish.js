@@ -20,6 +20,8 @@ const BONE_COUNT = 6;        // 骨骼段数：头骨 + 5 段身体/尾骨
 const SEG_LEN = 0.3;         // 相邻骨骼的恒定距离（跟随约束半径）
 const SWAY_PHASE = 0.9;      // 相邻骨骼摆动的相位差（沿身体传播，形成波动）
 const VISUAL_RAYS = [-55, -27, 0, 27, 55]; // 视野锥采样偏角（度，相对前方向）
+// 石头射线回避增益（<1：石头是可绕开的软障碍，转向比缸壁柔和；受惊期整体跳过，见 visualAvoid 调用处）
+const ROCK_AVOID_GAIN = 0.55;
 
 // Boids/边界/摆尾参数全部由 config.js 的 PARAMS 提供（updateFish 内解构，实时可调）
 
@@ -419,6 +421,29 @@ export function updateFish(fish, time, dt, fishes) {
   const MAX_PITCH = PARAMS.MAX_PITCH_DEG * Math.PI / 180;
   const MAX_BEND = PARAMS.MAX_BEND_DEG * Math.PI / 180;
 
+  // ---- 蹭叶轻啄（E）：计时器到点且附近有草 → 啄 0.6s（降游走/凝聚 + 贴叶 + 触发拨叶冲量）----
+  if (FEATURES.plantNibble && WORLD.plantRefs?.length > 0 && !ud.isPredator) {
+    if (ud.nibbleNext === undefined || time >= ud.nibbleNext) {
+      ud.nibbleNext = time + 10 + Math.random() * 15;
+      let best = null, bd = PARAMS.NIBBLE_SIGHT * PARAMS.NIBBLE_SIGHT;
+      for (const p of WORLD.plantRefs) {
+        const dx = p.position.x - pos.x, dz = p.position.z - pos.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bd) { bd = d2; best = p; }
+      }
+      if (best) {
+        ud.nibbleUntil = time + 0.6;
+        ud.nibblePos = {
+          x: best.position.x,
+          y: best.position.y + (best.userData.colliderR ?? 0.8),
+          z: best.position.z,
+        };
+        best.userData.impulse = Math.max(best.userData.impulse ?? 0, 0.55); // 啄一下 → 叶摆冲量
+      }
+    }
+  }
+  const nibbling = ud.nibbleUntil !== undefined && ud.nibbleUntil > time;
+
   // ---- 鱼群行为升级：全局调度（仅由首条非掠食者鱼驱动，避免重复计次）----
   if (FEATURES.fishPlay && ud.index === 0 && !ud.isPredator) {
     chaseTimer -= dt;
@@ -499,6 +524,8 @@ export function updateFish(fish, time, dt, fishes) {
   }
 
   tmpAcc.set(0, 0, 0);
+  // 蹭叶轻啄（E）：啄食期游走/凝聚降到 0.3（轻贴叶面、不脱离群太久）
+  const nibW = nibbling ? 0.3 : 1;
   if (count > 0) {
     const groupScale = 1 - 0.95 * avoid;
 
@@ -511,7 +538,7 @@ export function updateFish(fish, time, dt, fishes) {
     if (sepLen > 1) tmpSep.multiplyScalar(1 / sepLen);
     tmpSep.multiplyScalar(W_SEP * groupScale);
     tmpAlign.normalize().multiplyScalar(W_ALIGN * groupScale * alignCohScale);
-    tmpCoh.divideScalar(count).sub(pos).normalize().multiplyScalar(W_COH * groupScale * alignCohScale);
+    tmpCoh.divideScalar(count).sub(pos).normalize().multiplyScalar(W_COH * groupScale * alignCohScale * nibW);
     tmpAcc.add(tmpSep).add(tmpAlign).add(tmpCoh);
 
     // 速率匹配：巡航速度向邻居平均速率靠拢，同时受自身偏好约束
@@ -525,9 +552,38 @@ export function updateFish(fish, time, dt, fishes) {
   // ---- 随机游走（避免群聚后完全静止，垂直分量减弱；边界带内减弱，避免与视觉回避打架）----
   if (!ud.isPredator) {
     const randScale = 1 - avoid;
-    tmpAcc.x += Math.sin(time * 0.5 + ud.phase) * WANDER * randScale;
-    tmpAcc.y += Math.sin(time * 0.7 + ud.phase * 2) * WANDER * 0.2 * randScale;
-    tmpAcc.z += Math.cos(time * 0.6 + ud.phase) * WANDER * randScale;
+    tmpAcc.x += Math.sin(time * 0.5 + ud.phase) * WANDER * nibW * randScale;
+    tmpAcc.y += Math.sin(time * 0.7 + ud.phase * 2) * WANDER * nibW * 0.2 * randScale;
+    tmpAcc.z += Math.cos(time * 0.6 + ud.phase) * WANDER * nibW * randScale;
+  }
+
+  // ---- 蹭叶轻啄（E）：啄食期轻微贴向所选草叶，贴近即停 ----
+  if (nibbling && ud.nibblePos) {
+    const dx = ud.nibblePos.x - pos.x, dy = ud.nibblePos.y - pos.y, dz = ud.nibblePos.z - pos.z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (d > 0.4) tmpAcc.add(tmpV.set(dx / d, dy / d, dz / d).multiplyScalar(1.2));
+  }
+
+  // ---- 结构区偏好（D）：软吸引最近草/石柱体（水平），0.5s 重采样；越近越弱 → 边沿逗留平衡，
+  //      内部排斥仍由上方障碍回避负责（外吸内斥）；受惊时关闭（逃命优先）----
+  if (FEATURES.coverAttract && WORLD.obstacles.length > 0
+    && !(FEATURES.scatterPanic && ud.startleUntil > time && ud.startleActivated)) {
+    if (ud.coverNext === undefined || time >= ud.coverNext) {
+      ud.coverNext = time + 0.4 + Math.random() * 0.3;
+      let bd2 = Infinity, bx = 0, bz = 0;
+      for (const ob of WORLD.obstacles) {
+        const dx = ob.pos.x - pos.x, dz = ob.pos.z - pos.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bd2) { bd2 = d2; bx = dx; bz = dz; }
+      }
+      ud.coverDx = bx; ud.coverDz = bz;
+    }
+    const d = Math.sqrt(ud.coverDx * ud.coverDx + ud.coverDz * ud.coverDz);
+    if (d > 1e-3 && d < PARAMS.COVER_RANGE) {
+      const str = PARAMS.COVER_STR * (1 - d / PARAMS.COVER_RANGE);
+      tmpAcc.x += (ud.coverDx / d) * str;
+      tmpAcc.z += (ud.coverDz / d) * str;
+    }
   }
 
   // ---- 队形变换（可选特性）：周期性改变全局队形相位，鱼群按相位同步转向换队形 ----
@@ -581,7 +637,9 @@ export function updateFish(fish, time, dt, fishes) {
   // ---- 视觉回避：探测缸壁得到目标偏转角，低通平滑后缓慢施加 ----
   // 平滑防止射线命中状态逐帧跳变导致朝向抖动/旋转
   const debugRays = DEBUG_AVOID ? [] : null;
-  const yawTarget = visualAvoid(pos, tmpForward, b, VISUAL_SIGHT, debugRays);
+  // 受惊冲刺时跳过石头射线回避（配合惊散避难 C 冲进石头/草丛避难），缸壁回避保留
+  const skipRocks = FEATURES.scatterPanic && ud.startleUntil > time && ud.startleActivated;
+  const yawTarget = visualAvoid(pos, tmpForward, b, VISUAL_SIGHT, debugRays, skipRocks);
 
   // 受惊朝向覆盖：追踪逃逸方向，慌乱型周期性重采样（时变 → 慌乱感）
   let startleYaw = yawTarget;
@@ -589,7 +647,11 @@ export function updateFish(fish, time, dt, fishes) {
     if (ud.startleType === 1 && time >= ud.startleNextTurn) {
       tmpV.subVectors(pos, WORLD.scatterSource).normalize();
       const radialYaw = Math.atan2(tmpV.x, tmpV.z);
-      ud.startleEscapeYaw = radialYaw + (Math.random() - 0.5) * 2 * PANIC_JITTER;
+      const rY = ud.startleRefugeYaw;
+      // 慌乱重采样：基础背离 + 0.4 偏向避难所（边跑边找草）
+      ud.startleEscapeYaw = (rY === null || rY === undefined)
+        ? radialYaw + (Math.random() - 0.5) * 2 * PANIC_JITTER
+        : radialYaw * 0.6 + rY * 0.4 + (Math.random() - 0.5) * 2 * PANIC_JITTER;
       ud.startleNextTurn = time + 0.12 + Math.random() * 0.18;
     }
     const fwdYaw = Math.atan2(tmpForward.x, tmpForward.z);
@@ -659,13 +721,24 @@ export function updateFish(fish, time, dt, fishes) {
 
   // ---- 障碍回避（可选特性：水草/石头等装饰物）----
   if (FEATURES.decor && WORLD.obstacles.length > 0) {
+    // 受惊冲刺碰撞让路（配合惊散避难 C）：冲进冠层避难而非被草弹开
+    const startled = FEATURES.scatterPanic && ud.startleUntil > time && ud.startleActivated;
+    const obScale = startled ? 0.15 : 1;
     for (const ob of WORLD.obstacles) {
       tmpV.subVectors(pos, ob.pos);
       const d = tmpV.length();
       const reach = ob.radius + 0.6;
       if (d < reach && d > 1e-6) {
-        tmpV.normalize().multiplyScalar(3.2 * (1 - d / reach));
+        tmpV.normalize().multiplyScalar(3.2 * (1 - d / reach) * obScale);
         tmpAcc.add(tmpV);
+      }
+      // 位置级穿透解析：软推力只是加速度，高速鱼（惊散 ≈3x 巡航）能顶穿。
+      // 一旦真的钻进石体（d < radius）就直接推出表面 + 弹回径向速度分量，保证不穿石。
+      if (d < ob.radius && d > 1e-6) {
+        tmpV.subVectors(pos, ob.pos).normalize();
+        pos.addScaledVector(tmpV, ob.radius - d);
+        const vn = vel.dot(tmpV);
+        if (vn < 0) vel.addScaledVector(tmpV, -vn * 1.2);
       }
     }
   }
@@ -687,9 +760,26 @@ export function updateFish(fish, time, dt, fishes) {
           ? (r < PANIC_RATIO ? 1 : (r < PANIC_RATIO + DIVE_RATIO ? 2 : 0))
           : 0;
         tmpV.normalize();
+        // 惊散避难（C）：找最近草/石当避难所，逃逸 = REFUGE_BIAS 冲避难所 + (1-REFUGE_BIAS) 背离惊源
+        let refugeYaw = null;
+        if (FEATURES.panicRefuge && WORLD.obstacles.length > 0) {
+          let bestD2 = PARAMS.REFUGE_RANGE * PARAMS.REFUGE_RANGE, bx = 0, bz = 0;
+          for (const ob of WORLD.obstacles) {
+            const dx = ob.pos.x - pos.x, dy = ob.pos.y - pos.y, dz = ob.pos.z - pos.z;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < bestD2) { bestD2 = d2; bx = dx; bz = dz; }
+          }
+          if (bestD2 < PARAMS.REFUGE_RANGE * PARAMS.REFUGE_RANGE && bx * bx + bz * bz > 1e-4) {
+            refugeYaw = Math.atan2(bx, bz);
+          }
+        }
+        ud.startleRefugeYaw = refugeYaw;
         const jitter = (ud.startleType === 1 ? PANIC_JITTER : STARTLE_JITTER)
           * (Math.random() - 0.5) * 2;
-        ud.startleEscapeYaw = Math.atan2(tmpV.x, tmpV.z) + jitter;
+        const awayYaw = Math.atan2(tmpV.x, tmpV.z);
+        ud.startleEscapeYaw = (refugeYaw === null
+          ? awayYaw
+          : awayYaw * (1 - PARAMS.REFUGE_BIAS) + refugeYaw * PARAMS.REFUGE_BIAS) + jitter;
         ud.startleNextTurn = ud.startleTriggerTime + 0.12 + Math.random() * 0.18;
       }
     }
@@ -698,6 +788,10 @@ export function updateFish(fish, time, dt, fishes) {
       && time >= ud.startleTriggerTime) {
       ud.startleActivated = true;
       tmpV.subVectors(pos, WORLD.scatterSource).normalize();
+      if (ud.startleType === 2 && ud.startleRefugeYaw !== null && ud.startleRefugeYaw !== undefined) {
+        // 下潜型：水平冲向避难所，同时往下钻
+        tmpV.set(Math.sin(ud.startleRefugeYaw), 0, Math.cos(ud.startleRefugeYaw));
+      }
       vel.addScaledVector(tmpV, SCATTER_FORCE);
       if (ud.startleType === 2) vel.y -= DIVE_VEL; // 急转下潜型
     }
@@ -938,26 +1032,57 @@ function rayAABB(origin, dir, bounds) {
   return hit;
 }
 
+// 射线与单个球求交（dir 必须为单位向量）：返回最近进入时刻 t（起点在球内时返回离开时刻）；未命中 null
+function raySphere(origin, dir, sphere) {
+  const Lx = origin.x - sphere.pos.x, Ly = origin.y - sphere.pos.y, Lz = origin.z - sphere.pos.z;
+  const b = Lx * dir.x + Ly * dir.y + Lz * dir.z;
+  const c = Lx * Lx + Ly * Ly + Lz * Lz - sphere.radius * sphere.radius;
+  const disc = b * b - c;
+  if (disc < 0) return null;
+  const sq = Math.sqrt(disc);
+  let t = -b - sq;
+  if (t < 0) t = -b + sq;
+  if (t < 0 || !isFinite(t)) return null;
+  return t;
+}
+// 射线与石头叠层球集合求交：返回 sight 内最近命中距离；未命中 null
+function rayRockSpheres(origin, dir, sight, spheres) {
+  let best = null;
+  for (const sp of spheres) {
+    const t = raySphere(origin, dir, sp);
+    if (t !== null && t < sight && (best === null || t < best)) best = t;
+  }
+  return best;
+}
+
 // 视觉回避：鱼头前方扇形采样射线探测缸壁（视野锥）。
 // 命中边界时生成目标偏转 yaw（rad）：右侧命中→左转（负）、左侧命中→右转（正）、
 // 正前方命中→偏向空间更大一侧；命中越近 yaw 越大。
 // 只返回目标偏转角，由调用方平滑后施加，避免射线命中状态跳变导致朝向抖动
-function visualAvoid(pos, fwd, bounds, sight, outRays) {
+function visualAvoid(pos, fwd, bounds, sight, outRays, skipRocks = false) {
   let yaw = 0;
   let leftS = 0, rightS = 0, frontS = 0;
   for (const deg of VISUAL_RAYS) {
     const rad = deg * Math.PI / 180;
     // 采样射线方向：前方向绕竖直轴偏转 deg
     tmpV.copy(fwd).applyAxisAngle(tmpUp.set(0, 1, 0), rad);
-    const t = rayAABB(pos, tmpV, bounds);
+    // 缸壁命中（AABB slab）+ 石头命中（叠层球）：取最近者；
+    // 石头增益更柔和（可绕开的软障碍），受惊冲刺时跳过石头（配合惊散避难 C 冲进避难所）
+    let t = rayAABB(pos, tmpV, bounds);
+    let gain = 1;
+    if (!skipRocks && WORLD.rockSpheres?.length) {
+      const tr = rayRockSpheres(pos, tmpV, sight, WORLD.rockSpheres);
+      if (tr !== null && (t === null || tr < t)) { t = tr; gain = ROCK_AVOID_GAIN; }
+    }
     if (t === null || t > sight) continue;
     const s = 1 - t / sight; // 0~1 越近越强
-    if (outRays) outRays.push({ deg, t: +t.toFixed(2), s: +s.toFixed(2) });
-    if (deg < 0) leftS = Math.max(leftS, s);
-    else if (deg > 0) rightS = Math.max(rightS, s);
-    else frontS = s;
+    const sg = s * gain;
+    if (outRays) outRays.push({ deg, t: +t.toFixed(2), s: +sg.toFixed(2) });
+    if (deg < 0) leftS = Math.max(leftS, sg);
+    else if (deg > 0) rightS = Math.max(rightS, sg);
+    else frontS = sg;
     // 右侧命中→左转（负），左侧命中→右转（正）；偏角越小贡献越小
-    yaw += -Math.sin(rad) * s;
+    yaw += -Math.sin(rad) * sg;
   }
   // 正前方命中：偏向"空间更大"一侧（哪侧射线更近就远离哪侧），增益更果断
   if (frontS > 0) {

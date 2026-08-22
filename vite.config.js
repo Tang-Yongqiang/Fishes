@@ -4,4 +4,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: './',
+  // .glb/.gltf 等 3D 模型默认不在 Vite asset 列表，声明后 `?url` 导入才会拷贝进 dist。
+  assetsInclude: ['**/*.glb', '**/*.gltf'],
 });
